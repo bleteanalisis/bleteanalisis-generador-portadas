@@ -25,20 +25,82 @@ export default function Home() {
   const [format, setFormat] = useState("newsletter");
   const [watermark, setWatermark] = useState(false);
   const [customColor, setCustomColor] = useState(null);
+  const [jornadaText, setJornadaText] = useState("Jornada 14");
   const [positions, setPositions] = useState({});
   const [guides, setGuides] = useState({ v: false, h: false });
   const [dragActive, setDragActive] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  const [crestAUrl, setCrestAUrl] = useState(null);
+  const [crestBUrl, setCrestBUrl] = useState(null);
+  const [leagueUrl, setLeagueUrl] = useState(null);
+  const [teamCrestUrl, setTeamCrestUrl] = useState(null);
+  const [bgUrl, setBgUrl] = useState(null);
+  const [bgBlur, setBgBlur] = useState(8);
+  const [colectivoPhotos, setColectivoPhotos] = useState([]);
+
   const previewRef = useRef(null);
   const fileInputRef = useRef(null);
   const objectUrlRef = useRef(null);
 
+  const crestAInputRef = useRef(null);
+  const crestBInputRef = useRef(null);
+  const leagueInputRef = useRef(null);
+  const teamCrestInputRef = useRef(null);
+  const crestAUrlRef = useRef(null);
+  const crestBUrlRef = useRef(null);
+  const leagueUrlRef = useRef(null);
+  const teamCrestUrlRef = useRef(null);
+  const bgUrlRef = useRef(null);
+  const bgInputRef = useRef(null);
+  const colectivoInputRef = useRef(null);
+  const colectivoUrlsRef = useRef([]);
+
   useEffect(() => {
     return () => {
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      if (crestAUrlRef.current) URL.revokeObjectURL(crestAUrlRef.current);
+      if (crestBUrlRef.current) URL.revokeObjectURL(crestBUrlRef.current);
+      if (leagueUrlRef.current) URL.revokeObjectURL(leagueUrlRef.current);
+      if (teamCrestUrlRef.current) URL.revokeObjectURL(teamCrestUrlRef.current);
+      if (bgUrlRef.current) URL.revokeObjectURL(bgUrlRef.current);
+      colectivoUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
     };
   }, []);
+
+  function pickImage(urlRef, setter, file) {
+    if (!file) return;
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    const url = URL.createObjectURL(file);
+    urlRef.current = url;
+    setter(url);
+  }
+
+  function clearImage(urlRef, setter) {
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    urlRef.current = null;
+    setter(null);
+  }
+
+  function addColectivoPhoto(file) {
+    if (!file || colectivoPhotos.length >= 3) return;
+    const url = URL.createObjectURL(file);
+    colectivoUrlsRef.current.push(url);
+    setColectivoPhotos((list) => [...list, { url, name: file.name }]);
+    resetForNewPhoto();
+  }
+
+  function removeColectivoPhoto(index) {
+    setColectivoPhotos((list) => {
+      const item = list[index];
+      if (item) {
+        URL.revokeObjectURL(item.url);
+        colectivoUrlsRef.current = colectivoUrlsRef.current.filter((u) => u !== item.url);
+      }
+      return list.filter((_, i) => i !== index);
+    });
+    resetForNewPhoto();
+  }
 
   const accent = customColor || ACCENT_MAP[category];
 
@@ -56,6 +118,13 @@ export default function Home() {
     setGenerated(false);
     setGenerating(false);
     setPositions({});
+    clearImage(crestAUrlRef, setCrestAUrl);
+    clearImage(crestBUrlRef, setCrestBUrl);
+    clearImage(leagueUrlRef, setLeagueUrl);
+    clearImage(teamCrestUrlRef, setTeamCrestUrl);
+    colectivoUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
+    colectivoUrlsRef.current = [];
+    setColectivoPhotos([]);
   }
 
   function handleFileChosen(file) {
@@ -76,8 +145,10 @@ export default function Home() {
     resetForNewPhoto();
   }
 
+  const hasPhoto = category === "colectivo" ? colectivoPhotos.length > 0 : !!photoUrl;
+
   function handleGenerate() {
-    if (!photoUrl || generating) return;
+    if (!hasPhoto || generating) return;
     setGenerating(true);
     setGenerated(false);
     setTimeout(() => {
@@ -164,8 +235,28 @@ export default function Home() {
     return { left: p.left + "%", top: p.top + "%", right: "auto", bottom: "auto", transform: "translate(-50%,-50%)" };
   }
 
+  function colectivoFrameStyle(index, count) {
+    const spans = { 1: [60], 2: [36, 36], 3: [26, 30, 26] };
+    const heights = { 1: [80], 2: [78, 82], 3: [66, 84, 70] };
+    const widths = spans[count] || spans[1];
+    const heightList = heights[count] || heights[1];
+    const gap = 2;
+    const totalWidth = widths.reduce((a, b) => a + b, 0) + gap * (count - 1);
+    const startLeft = (100 - totalWidth) / 2;
+    let left = startLeft;
+    for (let i = 0; i < index; i++) left += widths[i] + gap;
+    return {
+      left: left + "%",
+      width: widths[index] + "%",
+      height: heightList[index] + "%",
+      bottom: 0,
+      WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 16%)",
+      maskImage: "linear-gradient(to bottom, transparent 0%, black 16%)",
+    };
+  }
+
   const fmt = RATIOS[format];
-  const generateLabel = generating ? "Generando…" : !photoUrl ? "Sube una foto primero" : generated ? "Volver a generar" : "Generar portada";
+  const generateLabel = generating ? "Generando…" : !hasPhoto ? "Sube una foto primero" : generated ? "Volver a generar" : "Generar portada";
   const stageCaptionText = generating
     ? "Componiendo con el tratamiento editorial…"
     : generated
@@ -205,92 +296,187 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="stack">
-            <div className="label">1 · Fotografía</div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg"
-              style={{ display: "none" }}
-              onChange={(e) => handleFileChosen(e.target.files?.[0] || null)}
-            />
-            {!photoUrl ? (
-              <button className="dropzone" onClick={() => fileInputRef.current?.click()}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9a24b" strokeWidth="1.6">
-                  <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
-                  <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-                </svg>
-                <div className="dropzone-title">Subir fotografía</div>
-                <div className="dropzone-sub">PNG o JPG · se recorta y estiliza sola</div>
-              </button>
-            ) : (
-              <>
-                <div className="photo-card">
+          {category === "colectivo" ? (
+            <div className="stack">
+              <div className="label">1 · Fotografías ({colectivoPhotos.length}/3)</div>
+              <input
+                ref={colectivoInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  addColectivoPhoto(e.target.files?.[0] || null);
+                  e.target.value = "";
+                }}
+              />
+              {colectivoPhotos.map((p, i) => (
+                <div className="photo-card" key={p.url}>
                   <div className="photo-thumb">
-                    <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+                    <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
                   </div>
                   <div className="photo-meta">
-                    <div className="photo-name">{photoName}</div>
-                    <div className="photo-status">{generated ? "Recorte + tratamiento aplicado" : "Lista para generar"}</div>
+                    <div className="photo-name">{p.name}</div>
+                    <div className="photo-status">{i === 0 ? "Jugador / cuerpo técnico" : "Jugador adicional"}</div>
                   </div>
-                  <button className="photo-remove" onClick={removePhoto} aria-label="Quitar foto">
+                  <button className="photo-remove" onClick={() => removeColectivoPhoto(i)} aria-label="Quitar foto">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M18 6L6 18M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
-                {generated && (
-                  <a href="#" className="adjust-link" onClick={(e) => e.preventDefault()}>
-                    Ajustar encuadre →
-                  </a>
-                )}
-              </>
-            )}
-          </div>
+              ))}
+              {colectivoPhotos.length < 3 && (
+                <button className="dropzone" onClick={() => colectivoInputRef.current?.click()}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9a24b" strokeWidth="1.6">
+                    <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
+                    <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                  </svg>
+                  <div className="dropzone-title">{colectivoPhotos.length === 0 ? "Subir fotografía" : "Añadir otra"}</div>
+                  <div className="dropzone-sub">Hasta 3 · jugadores, entrenador, etc.</div>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="stack">
+              <div className="label">1 · Fotografía</div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                style={{ display: "none" }}
+                onChange={(e) => handleFileChosen(e.target.files?.[0] || null)}
+              />
+              {!photoUrl ? (
+                <button className="dropzone" onClick={() => fileInputRef.current?.click()}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9a24b" strokeWidth="1.6">
+                    <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
+                    <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                  </svg>
+                  <div className="dropzone-title">Subir fotografía</div>
+                  <div className="dropzone-sub">PNG o JPG · se recorta y estiliza sola</div>
+                </button>
+              ) : (
+                <>
+                  <div className="photo-card">
+                    <div className="photo-thumb">
+                      <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+                    </div>
+                    <div className="photo-meta">
+                      <div className="photo-name">{photoName}</div>
+                      <div className="photo-status">{generated ? "Recorte + tratamiento aplicado" : "Lista para generar"}</div>
+                    </div>
+                    <button className="photo-remove" onClick={removePhoto} aria-label="Quitar foto">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {generated && (
+                    <a href="#" className="adjust-link" onClick={(e) => e.preventDefault()}>
+                      Ajustar encuadre →
+                    </a>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {category === "partido" && (
             <div className="stack">
               <div className="label">2 · Equipos y contexto</div>
               <div className="crest-row">
-                <div className="crest-slot">
-                  <div className="crest-dot" />
+                <input
+                  ref={crestAInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                  style={{ display: "none" }}
+                  onChange={(e) => pickImage(crestAUrlRef, setCrestAUrl, e.target.files?.[0] || null)}
+                />
+                <button type="button" className="crest-slot" onClick={() => crestAInputRef.current?.click()}>
+                  {crestAUrl ? (
+                    <img src={crestAUrl} alt="" className="crest-thumb" />
+                  ) : (
+                    <div className="crest-dot" />
+                  )}
                   <div className="crest-label">Escudo A</div>
-                </div>
-                <div className="crest-slot">
-                  <div className="crest-dot" />
+                </button>
+                <input
+                  ref={crestBInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                  style={{ display: "none" }}
+                  onChange={(e) => pickImage(crestBUrlRef, setCrestBUrl, e.target.files?.[0] || null)}
+                />
+                <button type="button" className="crest-slot" onClick={() => crestBInputRef.current?.click()}>
+                  {crestBUrl ? (
+                    <img src={crestBUrl} alt="" className="crest-thumb" />
+                  ) : (
+                    <div className="crest-dot" />
+                  )}
                   <div className="crest-label">Escudo B</div>
-                </div>
+                </button>
               </div>
-              <div className="league-row">
-                <div className="league-icon" />
+              <input
+                ref={leagueInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                style={{ display: "none" }}
+                onChange={(e) => pickImage(leagueUrlRef, setLeagueUrl, e.target.files?.[0] || null)}
+              />
+              <button type="button" className="league-row" onClick={() => leagueInputRef.current?.click()}>
+                {leagueUrl ? <img src={leagueUrl} alt="" className="league-thumb" /> : <div className="league-icon" />}
                 <div className="crest-label">Logo de la liga</div>
-              </div>
-              <div className="field-static">Jornada 14</div>
+              </button>
+              <input
+                className="field-static field-input"
+                value={jornadaText}
+                onChange={(e) => setJornadaText(e.target.value)}
+                placeholder="Jornada 14"
+              />
             </div>
           )}
 
           {category === "individual" && (
             <div className="stack">
               <div className="label">2 · Equipo del jugador</div>
-              <div className="toggle-row">
+              <input
+                ref={teamCrestInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                style={{ display: "none" }}
+                onChange={(e) => pickImage(teamCrestUrlRef, setTeamCrestUrl, e.target.files?.[0] || null)}
+              />
+              <button type="button" className="toggle-row" style={{ width: "100%", textAlign: "left" }} onClick={() => teamCrestInputRef.current?.click()}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div className="crest-dot" style={{ width: 26, height: 26, border: "1px dashed var(--border-strong)" }} />
-                  <div className="photo-status">Escudo (discreto)</div>
+                  {teamCrestUrl ? (
+                    <img src={teamCrestUrl} alt="" className="crest-thumb" style={{ width: 26, height: 26 }} />
+                  ) : (
+                    <div className="crest-dot" style={{ width: 26, height: 26, border: "1px dashed var(--border-strong)" }} />
+                  )}
+                  <div className="photo-status">{teamCrestUrl ? "Escudo cargado" : "Escudo (discreto) — toca para subir"}</div>
                 </div>
-                <button className="switch on">
-                  <div className="switch-knob" />
-                </button>
-              </div>
+              </button>
             </div>
           )}
 
           {category === "colectivo" && (
             <div className="stack">
               <div className="label">2 · Equipo</div>
-              <div className="league-row">
-                <div className="crest-dot" style={{ width: 26, height: 26 }} />
-                <div className="photo-status">Escudo del equipo</div>
-              </div>
+              <input
+                ref={teamCrestInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                style={{ display: "none" }}
+                onChange={(e) => pickImage(teamCrestUrlRef, setTeamCrestUrl, e.target.files?.[0] || null)}
+              />
+              <button type="button" className="league-row" onClick={() => teamCrestInputRef.current?.click()}>
+                {teamCrestUrl ? (
+                  <img src={teamCrestUrl} alt="" className="crest-thumb" style={{ width: 26, height: 26 }} />
+                ) : (
+                  <div className="crest-dot" style={{ width: 26, height: 26 }} />
+                )}
+                <div className="photo-status">{teamCrestUrl ? "Escudo cargado" : "Escudo del equipo — toca para subir"}</div>
+              </button>
               <div style={{ fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 }}>
                 Sube una foto con varios jugadores y/o el cuerpo técnico — la composición se adapta sola.
               </div>
@@ -321,7 +507,58 @@ export default function Home() {
           </div>
 
           <div className="stack">
-            <div className="label">4 · Formato de salida</div>
+            <div className="label">4 · Fondo personalizado</div>
+            <input
+              ref={bgInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              style={{ display: "none" }}
+              onChange={(e) => pickImage(bgUrlRef, setBgUrl, e.target.files?.[0] || null)}
+            />
+            {!bgUrl ? (
+              <button className="dropzone" onClick={() => bgInputRef.current?.click()}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c9a24b" strokeWidth="1.6">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <circle cx="8.5" cy="9.5" r="1.5" />
+                  <path d="M21 15l-5-5-8 8" />
+                </svg>
+                <div className="dropzone-title">Subir imagen de fondo</div>
+                <div className="dropzone-sub">Opcional · si no, se usa el fondo automático</div>
+              </button>
+            ) : (
+              <>
+                <div className="photo-card">
+                  <div className="photo-thumb">
+                    <img src={bgUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+                  </div>
+                  <div className="photo-meta">
+                    <div className="photo-name">Fondo personalizado</div>
+                    <div className="photo-status">Sustituye el fondo automático</div>
+                  </div>
+                  <button className="photo-remove" onClick={() => clearImage(bgUrlRef, setBgUrl)} aria-label="Quitar fondo">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="blur-row">
+                  <span className="crest-label">Desenfoque</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    value={bgBlur}
+                    onChange={(e) => setBgBlur(Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{bgBlur}px</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="stack">
+            <div className="label">5 · Formato de salida</div>
             <div className="chip-list">
               {Object.entries(RATIOS).map(([id, f]) => (
                 <button key={id} className={"chip" + (format === id ? " active" : "")} onClick={() => setFormat(id)}>
@@ -344,7 +581,7 @@ export default function Home() {
 
           <button
             className={"export-btn" + (generating ? " generating" : "")}
-            disabled={!photoUrl || generating}
+            disabled={!hasPhoto || generating}
             onClick={handleGenerate}
           >
             <svg className="btn-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -364,6 +601,11 @@ export default function Home() {
             className="preview"
             style={{ aspectRatio: fmt.ratio }}
           >
+            {bgUrl && (
+              <div className="custom-bg">
+                <img src={bgUrl} alt="" style={{ filter: `blur(${bgBlur}px) brightness(.55)` }} />
+              </div>
+            )}
             <div className="grain" />
             <div
               className="wash"
@@ -386,16 +628,21 @@ export default function Home() {
               <>
                 <div className="side-block" style={{ background: accent + "22" }} />
                 <div className="jornada-pill" style={styleFor("jornadaPill")} onPointerDown={startDrag("jornadaPill")}>
-                  Jornada 14
+                  {jornadaText || "Jornada 14"}
                 </div>
                 <div className="vs-mark">vs</div>
                 <div className="vs-line" />
                 <div className="crest-circle crest-a" style={styleFor("crestA")} onPointerDown={startDrag("crestA")}>
-                  A
+                  {crestAUrl ? <img src={crestAUrl} alt="" /> : "A"}
                 </div>
                 <div className="crest-circle crest-b" style={styleFor("crestB")} onPointerDown={startDrag("crestB")}>
-                  B
+                  {crestBUrl ? <img src={crestBUrl} alt="" /> : "B"}
                 </div>
+                {leagueUrl && (
+                  <div className="league-badge" style={styleFor("leagueLogo")} onPointerDown={startDrag("leagueLogo")}>
+                    <img src={leagueUrl} alt="" />
+                  </div>
+                )}
                 {generated && photoUrl && (
                   <div className="photo-frame photo-frame-partido">
                     <img src={photoUrl} alt="" />
@@ -414,7 +661,7 @@ export default function Home() {
                 )}
                 {!generated && <div className="empty-note">Sube una fotografía y pulsa<br />Generar para ver la vista previa</div>}
                 <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
-                  <div className="team-dot" />
+                  {teamCrestUrl ? <img className="team-dot" src={teamCrestUrl} alt="" /> : <div className="team-dot" />}
                   <div className="team-label">Equipo</div>
                 </div>
               </>
@@ -422,14 +669,16 @@ export default function Home() {
 
             {category === "colectivo" && (
               <>
-                {generated && photoUrl && (
-                  <div className="photo-frame photo-frame-colectivo">
-                    <img src={photoUrl} alt="" />
-                  </div>
-                )}
+                {generated &&
+                  colectivoPhotos.length > 0 &&
+                  colectivoPhotos.map((p, i) => (
+                    <div className="photo-frame" style={colectivoFrameStyle(i, colectivoPhotos.length)} key={p.url}>
+                      <img src={p.url} alt="" />
+                    </div>
+                  ))}
                 {!generated && <div className="empty-note">Sube una fotografía y pulsa<br />Generar para ver la vista previa</div>}
                 <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
-                  <div className="team-dot" />
+                  {teamCrestUrl ? <img className="team-dot" src={teamCrestUrl} alt="" /> : <div className="team-dot" />}
                   <div className="team-label">Equipo</div>
                 </div>
               </>
@@ -486,7 +735,7 @@ const CSS = `
 html,body{margin:0;padding:0;}
 body{background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
 a{color:var(--gold);text-decoration:none;}
-button{font-family:var(--font-sans);cursor:pointer;}
+button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appearance:none;color:inherit;font-size:inherit;}
 ::selection{background:var(--gold-soft);}
 .app{width:100%;min-height:100vh;display:flex;flex-direction:column;}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:22px 36px;border-bottom:1px solid var(--border);flex-shrink:0;}
@@ -519,10 +768,14 @@ button{font-family:var(--font-sans);cursor:pointer;}
 .crest-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
 .crest-slot{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px;background:var(--surface);border:1px dashed var(--border-strong);border-radius:10px;}
 .crest-dot{width:30px;height:30px;border-radius:50%;background:var(--surface-2);}
+.crest-thumb{width:30px;height:30px;border-radius:50%;object-fit:cover;background:var(--surface-2);}
 .crest-label{font-size:11px;color:var(--text-dim);}
-.league-row{display:flex;align-items:center;gap:6px;padding:10px 8px;background:var(--surface);border:1px dashed var(--border-strong);border-radius:10px;}
+.league-row{display:flex;align-items:center;gap:6px;padding:10px 8px;background:var(--surface);border:1px dashed var(--border-strong);border-radius:10px;width:100%;text-align:left;}
 .league-icon{width:22px;height:22px;border-radius:6px;background:var(--surface-2);flex-shrink:0;}
+.league-thumb{width:22px;height:22px;border-radius:6px;object-fit:contain;background:var(--surface-2);flex-shrink:0;}
 .field-static{padding:11px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text-faint);}
+.field-input{width:100%;outline:none;font-family:var(--font-sans);color:var(--text);}
+.field-input:focus{border-color:var(--gold);color:var(--text);}
 .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;}
 .toggle-row-title{font-size:13px;font-weight:600;}
 .toggle-row-sub{font-size:12px;color:var(--text-faint);}
@@ -559,6 +812,11 @@ button{font-family:var(--font-sans);cursor:pointer;}
 .ring{width:26px;height:26px;border-radius:50%;border:2.5px solid var(--border-strong);border-top-color:var(--gold);animation:spin .8s linear infinite;}
 .stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:48px;background:radial-gradient(ellipse at 50% 40%,var(--bg-2) 0%,var(--bg) 70%);min-width:0;}
 .preview{width:min(100%,860px);position:relative;border-radius:6px;overflow:hidden;box-shadow:0 30px 80px -20px rgba(0,0,0,0.6),0 0 0 1px var(--border-strong);background:linear-gradient(160deg,#141210 0%,#0a0908 60%,#060505 100%);container-type:inline-size;}
+.custom-bg{position:absolute;inset:-4%;pointer-events:none;overflow:hidden;}
+.custom-bg img{width:100%;height:100%;object-fit:cover;}
+.blur-row{display:flex;align-items:center;gap:10px;padding:2px 2px;}
+.blur-slider{flex:1;accent-color:var(--gold);}
+.blur-value{font-size:11px;color:var(--text-faint);font-variant-numeric:tabular-nums;min-width:32px;text-align:right;}
 .grain{position:absolute;inset:0;background-image:repeating-linear-gradient(0deg,rgba(255,255,255,0.015) 0px,rgba(255,255,255,0.015) 1px,transparent 1px,transparent 3px);pointer-events:none;}
 .wash{position:absolute;inset:0;pointer-events:none;}
 .diagonal-sweep{position:absolute;inset:0;pointer-events:none;}
@@ -568,11 +826,14 @@ button{font-family:var(--font-sans);cursor:pointer;}
 .jornada-pill{position:absolute;left:50%;top:29%;transform:translateX(-50%);padding:1.6% 4.2%;border:1px solid rgba(243,237,224,.3);border-radius:999px;font-size:2.6cqw;letter-spacing:.14em;color:var(--text-dim);text-transform:uppercase;white-space:nowrap;}
 .vs-mark{position:absolute;left:50%;top:18.5%;transform:translate(-50%,-50%);font-family:var(--font-display);font-style:italic;font-size:2.6cqw;color:var(--text-faint);}
 .vs-line{position:absolute;left:50%;top:40%;bottom:10%;width:1px;background:linear-gradient(180deg,transparent 0%,rgba(243,237,224,.3) 50%,transparent 100%);}
-.crest-circle{width:11%;aspect-ratio:1;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:3.4cqw;color:var(--text-dim);position:absolute;top:13%;}
+.crest-circle{width:11%;aspect-ratio:1;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:var(--font-display);font-size:3.4cqw;color:var(--text-dim);position:absolute;top:13%;}
+.crest-circle img{width:100%;height:100%;object-fit:cover;}
 .crest-a{left:50%;transform:translateX(calc(-100% - 5.5%));}
 .crest-b{left:calc(50% + 5.5%);}
+.league-badge{position:absolute;left:50%;top:3%;transform:translateX(-50%);width:8%;aspect-ratio:1;border-radius:8px;background:var(--surface-2);border:1px solid var(--border-strong);overflow:hidden;display:flex;align-items:center;justify-content:center;}
+.league-badge img{width:100%;height:100%;object-fit:contain;padding:2px;}
 .team-tag{position:absolute;left:8%;bottom:9%;display:flex;align-items:center;gap:7px;opacity:.85;}
-.team-dot{width:20px;height:20px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);}
+.team-dot{width:20px;height:20px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);object-fit:cover;}
 .team-label{font-family:var(--font-sans);font-size:10px;letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase;}
 .empty-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);font-size:12px;color:var(--text-faint);text-align:center;letter-spacing:.04em;line-height:1.5;}
 .watermark{position:absolute;right:4%;bottom:4%;font-family:var(--font-display);font-size:11px;letter-spacing:.08em;color:rgba(243,237,224,.4);}
@@ -581,9 +842,9 @@ button{font-family:var(--font-sans);cursor:pointer;}
 .photo-frame-individual{right:6%;bottom:0;width:46%;height:92%;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-colectivo{left:50%;bottom:0;width:60%;height:80%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-partido{left:50%;bottom:0;width:46%;height:74%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 20%);mask-image:linear-gradient(to bottom,transparent 0%,black 20%);}
-.jornada-pill,.crest-circle,.team-tag{cursor:grab;touch-action:none;}
-.jornada-pill:hover,.crest-circle:hover,.team-tag:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
-.jornada-pill:active,.crest-circle:active,.team-tag:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
+.jornada-pill,.crest-circle,.team-tag,.league-badge{cursor:grab;touch-action:none;}
+.jornada-pill:hover,.crest-circle:hover,.team-tag:hover,.league-badge:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
+.jornada-pill:active,.crest-circle:active,.team-tag:active,.league-badge:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
 .safe-margin{position:absolute;inset:6%;border:1px dashed rgba(243,237,224,.3);pointer-events:none;opacity:0;transition:opacity .15s ease;border-radius:2px;}
 .safe-margin.show{opacity:1;}
 .snap-guide{position:absolute;background:var(--gold);opacity:0;pointer-events:none;transition:opacity .08s ease;box-shadow:0 0 6px rgba(201,162,75,.6);}
