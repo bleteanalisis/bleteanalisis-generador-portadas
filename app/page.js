@@ -161,7 +161,7 @@ export default function Home() {
     if (!generated || !previewRef.current || exporting) return;
     setExporting(true);
     try {
-      const dataUrl = await toPng(previewRef.current, { pixelRatio: 2, cacheBust: true });
+      const dataUrl = await toPng(previewRef.current, { pixelRatio: 2 });
       const link = document.createElement("a");
       link.download = `portada-${category}-${format}.png`;
       link.href = dataUrl;
