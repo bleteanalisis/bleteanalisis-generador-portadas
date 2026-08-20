@@ -42,6 +42,11 @@ export default function Home() {
   const [leagueScale, setLeagueScale] = useState(1);
   const [teamCrestScale, setTeamCrestScale] = useState(1);
   const [autoAccent, setAutoAccent] = useState(null);
+  const [showJornada, setShowJornada] = useState(true);
+  const [showVs, setShowVs] = useState(true);
+  const [showVsLine, setShowVsLine] = useState(true);
+  const [photoScale, setPhotoScale] = useState(1);
+  const [photoOffsetY, setPhotoOffsetY] = useState(0);
   const [watermarkUrl, setWatermarkUrl] = useState(null);
   const [watermarkScale, setWatermarkScale] = useState(1);
   const [watermarkOpacity, setWatermarkOpacity] = useState(55);
@@ -259,6 +264,11 @@ export default function Home() {
     setLeagueScale(1);
     setTeamCrestScale(1);
     setAutoAccent(null);
+    setPhotoScale(1);
+    setPhotoOffsetY(0);
+    setShowJornada(true);
+    setShowVs(true);
+    setShowVsLine(true);
   }
 
   function handleFileChosen(file) {
@@ -280,9 +290,11 @@ export default function Home() {
   }
 
   const hasPhoto = category === "colectivo" ? colectivoPhotos.length > 0 : !!photoUrl;
+  const hasContent =
+    hasPhoto || !!bgUrl || !!crestAUrl || !!crestBUrl || !!leagueUrl || !!teamCrestUrl;
 
   function handleGenerate() {
-    if (!hasPhoto || generating) return;
+    if (!hasContent || generating) return;
     setGenerating(true);
     setGenerated(false);
     setTimeout(() => {
@@ -368,10 +380,54 @@ export default function Home() {
     setPositions({});
   }
 
+  function resetAll() {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    objectUrlRef.current = null;
+    colectivoUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
+    colectivoUrlsRef.current = [];
+    clearImage(crestAUrlRef, setCrestAUrl);
+    clearImage(crestBUrlRef, setCrestBUrl);
+    clearImage(leagueUrlRef, setLeagueUrl);
+    clearImage(teamCrestUrlRef, setTeamCrestUrl);
+    clearImage(bgUrlRef, setBgUrl);
+    clearImage(watermarkUrlRef, setWatermarkUrl);
+
+    setPhotoUrl(null);
+    setPhotoName("");
+    setColectivoPhotos([]);
+    setGenerated(false);
+    setGenerating(false);
+    setPositions({});
+    setCustomColor(null);
+    setAutoAccent(null);
+    setJornadaText("Jornada 14");
+    setShowJornada(true);
+    setShowVs(true);
+    setShowVsLine(true);
+    setPhotoScale(1);
+    setPhotoOffsetY(0);
+    setCrestScale(1);
+    setLeagueScale(1);
+    setTeamCrestScale(1);
+    setBgBlur(8);
+    setWatermark(false);
+    setWatermarkScale(1);
+    setWatermarkOpacity(55);
+    setFormat("newsletter");
+  }
+
   function styleFor(key) {
     const p = positions[key];
     if (!p) return {};
     return { left: p.left + "%", top: p.top + "%", right: "auto", bottom: "auto", transform: "translate(-50%,-50%)" };
+  }
+
+  function photoFrameStyle() {
+    return {
+      width: 46 * photoScale + "%",
+      height: 74 * photoScale + "%",
+      bottom: photoOffsetY + "%",
+    };
   }
 
   function colectivoFrameStyle(index, count) {
@@ -395,12 +451,18 @@ export default function Home() {
   }
 
   const fmt = RATIOS[format];
-  const generateLabel = generating ? "Generando…" : !hasPhoto ? "Sube una foto primero" : generated ? "Volver a generar" : "Generar portada";
+  const generateLabel = generating
+    ? "Generando…"
+    : !hasContent
+    ? "Añade una foto, un fondo o un escudo"
+    : generated
+    ? "Volver a generar"
+    : "Generar portada";
   const stageCaptionText = generating
     ? "Componiendo con el tratamiento editorial…"
     : generated
     ? "Vista previa — así se compondría tu portada"
-    : "Sube una fotografía y pulsa Generar";
+    : "Añade una foto, un fondo o un escudo y pulsa Generar";
 
   return (
     <div className="app">
@@ -510,10 +572,34 @@ export default function Home() {
                       </svg>
                     </button>
                   </div>
-                  {generated && (
-                    <a href="#" className="adjust-link" onClick={(e) => e.preventDefault()}>
-                      Ajustar encuadre →
-                    </a>
+                  {category === "partido" && (
+                    <>
+                      <div className="blur-row">
+                        <span className="crest-label">Tamaño</span>
+                        <input
+                          type="range"
+                          min="0.4"
+                          max="1.6"
+                          step="0.05"
+                          value={photoScale}
+                          onChange={(e) => setPhotoScale(Number(e.target.value))}
+                          className="blur-slider"
+                        />
+                        <span className="blur-value">{Math.round(photoScale * 100)}%</span>
+                      </div>
+                      <div className="blur-row">
+                        <span className="crest-label">Altura</span>
+                        <input
+                          type="range"
+                          min="-20"
+                          max="20"
+                          value={photoOffsetY}
+                          onChange={(e) => setPhotoOffsetY(Number(e.target.value))}
+                          className="blur-slider"
+                        />
+                        <span className="blur-value">{photoOffsetY}%</span>
+                      </div>
+                    </>
                   )}
                 </>
               )}
@@ -618,7 +704,27 @@ export default function Home() {
                 value={jornadaText}
                 onChange={(e) => setJornadaText(e.target.value)}
                 placeholder="Jornada 14"
+                disabled={!showJornada}
+                style={showJornada ? undefined : { opacity: 0.4 }}
               />
+              <div className="toggle-row">
+                <div className="toggle-row-title">Mostrar jornada</div>
+                <button className={"switch" + (showJornada ? " on" : "")} onClick={() => setShowJornada((v) => !v)}>
+                  <div className="switch-knob" />
+                </button>
+              </div>
+              <div className="toggle-row">
+                <div className="toggle-row-title">Mostrar «vs»</div>
+                <button className={"switch" + (showVs ? " on" : "")} onClick={() => setShowVs((v) => !v)}>
+                  <div className="switch-knob" />
+                </button>
+              </div>
+              <div className="toggle-row">
+                <div className="toggle-row-title">Mostrar línea divisoria</div>
+                <button className={"switch" + (showVsLine ? " on" : "")} onClick={() => setShowVsLine((v) => !v)}>
+                  <div className="switch-knob" />
+                </button>
+              </div>
             </div>
           )}
 
@@ -889,7 +995,7 @@ export default function Home() {
 
           <button
             className={"export-btn" + (generating ? " generating" : "")}
-            disabled={!hasPhoto || generating}
+            disabled={!hasContent || generating}
             onClick={handleGenerate}
           >
             <svg className="btn-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -938,11 +1044,22 @@ export default function Home() {
 
             {category === "partido" && (
               <>
-                <div className="jornada-pill" style={styleFor("jornadaPill")} onPointerDown={startDrag("jornadaPill")}>
-                  {jornadaText || "Jornada 14"}
-                </div>
-                <div className="vs-mark">vs</div>
-                <div className="vs-line" />
+                {generated && photoUrl && (
+                  <div className="photo-frame photo-frame-partido" style={photoFrameStyle()}>
+                    <img src={photoUrl} alt="" />
+                  </div>
+                )}
+                {showJornada && (
+                  <div className="jornada-pill" style={styleFor("jornadaPill")} onPointerDown={startDrag("jornadaPill")}>
+                    {jornadaText || "Jornada 14"}
+                  </div>
+                )}
+                {showVs && (
+                  <div className="vs-mark" style={styleFor("vsMark")} onPointerDown={startDrag("vsMark")}>
+                    vs
+                  </div>
+                )}
+                {showVsLine && <div className="vs-line" />}
                 <div
                   className={(crestAUrl ? "crest-logo" : "crest-mark") + " crest-a"}
                   style={{ ...styleFor("crestA"), width: crestScale * 11 + "%" }}
@@ -966,12 +1083,7 @@ export default function Home() {
                     <img src={leagueUrl} alt="" />
                   </div>
                 )}
-                {generated && photoUrl && (
-                  <div className="photo-frame photo-frame-partido">
-                    <img src={photoUrl} alt="" />
-                  </div>
-                )}
-                {!generated && <div className="empty-note">Sube una fotografía y pulsa<br />Generar para ver la composición</div>}
+                {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar<br />(la foto es opcional)</div>}
               </>
             )}
 
@@ -982,7 +1094,7 @@ export default function Home() {
                     <img src={photoUrl} alt="" />
                   </div>
                 )}
-                {!generated && <div className="empty-note">Sube una fotografía y pulsa<br />Generar para ver la vista previa</div>}
+                {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar<br />(la foto es opcional)</div>}
                 <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
                   {teamCrestUrl ? (
                     <div className="team-logo" style={{ width: 22 * teamCrestScale }}>
@@ -1005,7 +1117,7 @@ export default function Home() {
                       <img src={p.url} alt="" />
                     </div>
                   ))}
-                {!generated && <div className="empty-note">Sube una fotografía y pulsa<br />Generar para ver la vista previa</div>}
+                {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar<br />(la foto es opcional)</div>}
                 <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
                   {teamCrestUrl ? (
                     <div className="team-logo" style={{ width: 22 * teamCrestScale }}>
@@ -1058,6 +1170,10 @@ export default function Home() {
             <span style={{ color: "var(--border-strong)" }}>·</span>
             <button className="reset-link" onClick={resetPositions}>
               Restablecer posiciones
+            </button>
+            <span style={{ color: "var(--border-strong)" }}>·</span>
+            <button className="reset-link danger" onClick={resetAll}>
+              Empezar de cero
             </button>
           </div>
           <div className="stage-caption" style={{ opacity: 0.75 }}>
@@ -1188,14 +1304,14 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .empty-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);font-size:12px;color:var(--text-faint);text-align:center;letter-spacing:.04em;line-height:1.5;}
 .watermark-logo{position:absolute;right:4%;bottom:4%;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));}
 .watermark-logo img{width:100%;height:auto;display:block;object-fit:contain;}
-.photo-frame{position:absolute;overflow:hidden;}
+.photo-frame{position:absolute;overflow:hidden;z-index:1;}
 .photo-frame img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.15) brightness(.92);display:block;}
 .photo-frame-individual{right:6%;bottom:0;width:46%;height:92%;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-colectivo{left:50%;bottom:0;width:60%;height:80%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-partido{left:50%;bottom:0;width:46%;height:74%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 20%);mask-image:linear-gradient(to bottom,transparent 0%,black 20%);}
-.jornada-pill,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo{cursor:grab;touch-action:none;}
-.jornada-pill:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
-.jornada-pill:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
+.jornada-pill,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo,.vs-mark{cursor:grab;touch-action:none;z-index:3;}
+.jornada-pill:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover,.vs-mark:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
+.jornada-pill:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active,.vs-mark:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
 .safe-margin{position:absolute;inset:6%;border:1px dashed rgba(243,237,224,.3);pointer-events:none;opacity:0;transition:opacity .15s ease;border-radius:2px;}
 .safe-margin.show{opacity:1;}
 .snap-guide{position:absolute;background:var(--gold);opacity:0;pointer-events:none;transition:opacity .08s ease;box-shadow:0 0 6px rgba(201,162,75,.6);}
@@ -1204,6 +1320,7 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 #guideH{top:50%;left:0;right:0;height:1px;transform:translateY(-50%);}
 .reset-link{font-size:12px;background:none;border:none;color:var(--text-faint);padding:0;}
 .reset-link:hover{color:var(--gold);}
+.reset-link.danger:hover{color:#d2624f;}
 @media (max-width:860px){
   .body{flex-direction:column;}
   .panel{width:100%;max-height:none;border-right:none;border-bottom:1px solid var(--border);}
