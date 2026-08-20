@@ -38,6 +38,9 @@ export default function Home() {
   const [bgUrl, setBgUrl] = useState(null);
   const [bgBlur, setBgBlur] = useState(8);
   const [colectivoPhotos, setColectivoPhotos] = useState([]);
+  const [crestScale, setCrestScale] = useState(1);
+  const [leagueScale, setLeagueScale] = useState(1);
+  const [teamCrestScale, setTeamCrestScale] = useState(1);
 
   const previewRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -67,6 +70,68 @@ export default function Home() {
       colectivoUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
     };
   }, []);
+
+  function stripBackground(file) {
+    return new Promise((resolve) => {
+      if (!file || !file.type.startsWith("image/") || file.type === "image/svg+xml") {
+        resolve(file);
+        return;
+      }
+      const img = new window.Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        try {
+          const maxDim = 700;
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(url);
+          const data = ctx.getImageData(0, 0, w, h);
+          const px = data.data;
+          const sample = (x, y) => {
+            const i = (y * w + x) * 4;
+            return [px[i], px[i + 1], px[i + 2], px[i + 3]];
+          };
+          const corners = [sample(1, 1), sample(w - 2, 1), sample(1, h - 2), sample(w - 2, h - 2)];
+          const avgAlpha = corners.reduce((a, c) => a + c[3] / 4, 0);
+          if (avgAlpha < 40) {
+            resolve(file);
+            return;
+          }
+          const bg = corners.reduce((a, c) => [a[0] + c[0] / 4, a[1] + c[1] / 4, a[2] + c[2] / 4], [0, 0, 0]);
+          const dist = (r, g, b) => Math.sqrt((r - bg[0]) ** 2 + (g - bg[1]) ** 2 + (b - bg[2]) ** 2);
+          const T1 = 38;
+          const T2 = 100;
+          for (let i = 0; i < px.length; i += 4) {
+            const d = dist(px[i], px[i + 1], px[i + 2]);
+            if (d < T1) {
+              px[i + 3] = 0;
+            } else if (d < T2) {
+              px[i + 3] = Math.round(px[i + 3] * ((d - T1) / (T2 - T1)));
+            }
+          }
+          ctx.putImageData(data, 0, 0);
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              resolve(file);
+              return;
+            }
+            resolve(new File([blob], file.name.replace(/\.[^.]+$/, "") + "-sinfondo.png", { type: "image/png" }));
+          }, "image/png");
+        } catch (err) {
+          console.error("No se pudo quitar el fondo", err);
+          resolve(file);
+        }
+      };
+      img.onerror = () => resolve(file);
+      img.src = url;
+    });
+  }
 
   function pickImage(urlRef, setter, file) {
     if (!file) return;
@@ -125,6 +190,9 @@ export default function Home() {
     colectivoUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
     colectivoUrlsRef.current = [];
     setColectivoPhotos([]);
+    setCrestScale(1);
+    setLeagueScale(1);
+    setTeamCrestScale(1);
   }
 
   function handleFileChosen(file) {
@@ -390,7 +458,12 @@ export default function Home() {
                   type="file"
                   accept="image/png,image/jpeg,image/svg+xml,image/webp"
                   style={{ display: "none" }}
-                  onChange={(e) => pickImage(crestAUrlRef, setCrestAUrl, e.target.files?.[0] || null)}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0] || null;
+                    e.target.value = "";
+                    if (!f) return;
+                    pickImage(crestAUrlRef, setCrestAUrl, await stripBackground(f));
+                  }}
                 />
                 <button type="button" className="crest-slot" onClick={() => crestAInputRef.current?.click()}>
                   {crestAUrl ? (
@@ -405,7 +478,12 @@ export default function Home() {
                   type="file"
                   accept="image/png,image/jpeg,image/svg+xml,image/webp"
                   style={{ display: "none" }}
-                  onChange={(e) => pickImage(crestBUrlRef, setCrestBUrl, e.target.files?.[0] || null)}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0] || null;
+                    e.target.value = "";
+                    if (!f) return;
+                    pickImage(crestBUrlRef, setCrestBUrl, await stripBackground(f));
+                  }}
                 />
                 <button type="button" className="crest-slot" onClick={() => crestBInputRef.current?.click()}>
                   {crestBUrl ? (
@@ -416,17 +494,52 @@ export default function Home() {
                   <div className="crest-label">Escudo B</div>
                 </button>
               </div>
+              {(crestAUrl || crestBUrl) && (
+                <div className="blur-row">
+                  <span className="crest-label">Tamaño</span>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.05"
+                    value={crestScale}
+                    onChange={(e) => setCrestScale(Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{Math.round(crestScale * 100)}%</span>
+                </div>
+              )}
               <input
                 ref={leagueInputRef}
                 type="file"
                 accept="image/png,image/jpeg,image/svg+xml,image/webp"
                 style={{ display: "none" }}
-                onChange={(e) => pickImage(leagueUrlRef, setLeagueUrl, e.target.files?.[0] || null)}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0] || null;
+                  e.target.value = "";
+                  if (!f) return;
+                  pickImage(leagueUrlRef, setLeagueUrl, await stripBackground(f));
+                }}
               />
               <button type="button" className="league-row" onClick={() => leagueInputRef.current?.click()}>
                 {leagueUrl ? <img src={leagueUrl} alt="" className="league-thumb" /> : <div className="league-icon" />}
                 <div className="crest-label">Logo de la liga</div>
               </button>
+              {leagueUrl && (
+                <div className="blur-row">
+                  <span className="crest-label">Tamaño</span>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.05"
+                    value={leagueScale}
+                    onChange={(e) => setLeagueScale(Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{Math.round(leagueScale * 100)}%</span>
+                </div>
+              )}
               <input
                 className="field-static field-input"
                 value={jornadaText}
@@ -444,7 +557,12 @@ export default function Home() {
                 type="file"
                 accept="image/png,image/jpeg,image/svg+xml,image/webp"
                 style={{ display: "none" }}
-                onChange={(e) => pickImage(teamCrestUrlRef, setTeamCrestUrl, e.target.files?.[0] || null)}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0] || null;
+                  e.target.value = "";
+                  if (!f) return;
+                  pickImage(teamCrestUrlRef, setTeamCrestUrl, await stripBackground(f));
+                }}
               />
               <button type="button" className="toggle-row" style={{ width: "100%", textAlign: "left" }} onClick={() => teamCrestInputRef.current?.click()}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -456,6 +574,21 @@ export default function Home() {
                   <div className="photo-status">{teamCrestUrl ? "Escudo cargado" : "Escudo (discreto) — toca para subir"}</div>
                 </div>
               </button>
+              {teamCrestUrl && (
+                <div className="blur-row">
+                  <span className="crest-label">Tamaño</span>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.5"
+                    step="0.05"
+                    value={teamCrestScale}
+                    onChange={(e) => setTeamCrestScale(Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{Math.round(teamCrestScale * 100)}%</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -467,7 +600,12 @@ export default function Home() {
                 type="file"
                 accept="image/png,image/jpeg,image/svg+xml,image/webp"
                 style={{ display: "none" }}
-                onChange={(e) => pickImage(teamCrestUrlRef, setTeamCrestUrl, e.target.files?.[0] || null)}
+                onChange={async (e) => {
+                  const f = e.target.files?.[0] || null;
+                  e.target.value = "";
+                  if (!f) return;
+                  pickImage(teamCrestUrlRef, setTeamCrestUrl, await stripBackground(f));
+                }}
               />
               <button type="button" className="league-row" onClick={() => teamCrestInputRef.current?.click()}>
                 {teamCrestUrl ? (
@@ -477,6 +615,21 @@ export default function Home() {
                 )}
                 <div className="photo-status">{teamCrestUrl ? "Escudo cargado" : "Escudo del equipo — toca para subir"}</div>
               </button>
+              {teamCrestUrl && (
+                <div className="blur-row">
+                  <span className="crest-label">Tamaño</span>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.5"
+                    step="0.05"
+                    value={teamCrestScale}
+                    onChange={(e) => setTeamCrestScale(Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{Math.round(teamCrestScale * 100)}%</span>
+                </div>
+              )}
               <div style={{ fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 }}>
                 Sube una foto con varios jugadores y/o el cuerpo técnico — la composición se adapta sola.
               </div>
@@ -632,14 +785,26 @@ export default function Home() {
                 </div>
                 <div className="vs-mark">vs</div>
                 <div className="vs-line" />
-                <div className="crest-circle crest-a" style={styleFor("crestA")} onPointerDown={startDrag("crestA")}>
+                <div
+                  className="crest-circle crest-a"
+                  style={{ ...styleFor("crestA"), width: crestScale * 11 + "%" }}
+                  onPointerDown={startDrag("crestA")}
+                >
                   {crestAUrl ? <img src={crestAUrl} alt="" /> : "A"}
                 </div>
-                <div className="crest-circle crest-b" style={styleFor("crestB")} onPointerDown={startDrag("crestB")}>
+                <div
+                  className="crest-circle crest-b"
+                  style={{ ...styleFor("crestB"), width: crestScale * 11 + "%" }}
+                  onPointerDown={startDrag("crestB")}
+                >
                   {crestBUrl ? <img src={crestBUrl} alt="" /> : "B"}
                 </div>
                 {leagueUrl && (
-                  <div className="league-badge" style={styleFor("leagueLogo")} onPointerDown={startDrag("leagueLogo")}>
+                  <div
+                    className="league-badge"
+                    style={{ ...styleFor("leagueLogo"), width: leagueScale * 8 + "%" }}
+                    onPointerDown={startDrag("leagueLogo")}
+                  >
                     <img src={leagueUrl} alt="" />
                   </div>
                 )}
@@ -661,7 +826,11 @@ export default function Home() {
                 )}
                 {!generated && <div className="empty-note">Sube una fotografía y pulsa<br />Generar para ver la vista previa</div>}
                 <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
-                  {teamCrestUrl ? <img className="team-dot" src={teamCrestUrl} alt="" /> : <div className="team-dot" />}
+                  {teamCrestUrl ? (
+                    <img className="team-dot" src={teamCrestUrl} alt="" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
+                  ) : (
+                    <div className="team-dot" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
+                  )}
                   <div className="team-label">Equipo</div>
                 </div>
               </>
@@ -678,7 +847,11 @@ export default function Home() {
                   ))}
                 {!generated && <div className="empty-note">Sube una fotografía y pulsa<br />Generar para ver la vista previa</div>}
                 <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
-                  {teamCrestUrl ? <img className="team-dot" src={teamCrestUrl} alt="" /> : <div className="team-dot" />}
+                  {teamCrestUrl ? (
+                    <img className="team-dot" src={teamCrestUrl} alt="" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
+                  ) : (
+                    <div className="team-dot" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
+                  )}
                   <div className="team-label">Equipo</div>
                 </div>
               </>
