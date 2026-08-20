@@ -11,9 +11,9 @@ const SWEEP_SHAPES = {
   colectivo: "polygon(0% 100%,100% 48%,100% 100%)",
 };
 const RATIOS = {
-  newsletter: { label: "Newsletter", dims: "1200 × 630", ratio: "1200/630" },
-  estandar: { label: "Estándar", dims: "1280 × 720", ratio: "1280/720" },
-  portfolio: { label: "Portfolio", dims: "4 : 3", ratio: "4/3" },
+  newsletter: { label: "Newsletter", dims: "1200 × 630", ratio: "1200/630", w: 1200, h: 630 },
+  estandar: { label: "Estándar", dims: "1280 × 720", ratio: "1280/720", w: 1280, h: 720 },
+  portfolio: { label: "Portfolio", dims: "1600 × 1200", ratio: "4/3", w: 1600, h: 1200 },
 };
 
 export default function Home() {
@@ -42,6 +42,9 @@ export default function Home() {
   const [leagueScale, setLeagueScale] = useState(1);
   const [teamCrestScale, setTeamCrestScale] = useState(1);
   const [autoAccent, setAutoAccent] = useState(null);
+  const [watermarkUrl, setWatermarkUrl] = useState(null);
+  const [watermarkScale, setWatermarkScale] = useState(1);
+  const [watermarkOpacity, setWatermarkOpacity] = useState(55);
 
   const previewRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -57,6 +60,8 @@ export default function Home() {
   const teamCrestUrlRef = useRef(null);
   const bgUrlRef = useRef(null);
   const bgInputRef = useRef(null);
+  const watermarkUrlRef = useRef(null);
+  const watermarkInputRef = useRef(null);
   const colectivoInputRef = useRef(null);
   const colectivoUrlsRef = useRef([]);
 
@@ -68,6 +73,7 @@ export default function Home() {
       if (leagueUrlRef.current) URL.revokeObjectURL(leagueUrlRef.current);
       if (teamCrestUrlRef.current) URL.revokeObjectURL(teamCrestUrlRef.current);
       if (bgUrlRef.current) URL.revokeObjectURL(bgUrlRef.current);
+      if (watermarkUrlRef.current) URL.revokeObjectURL(watermarkUrlRef.current);
       colectivoUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
     };
   }, []);
@@ -289,7 +295,12 @@ export default function Home() {
     if (!generated || !previewRef.current || exporting) return;
     setExporting(true);
     try {
-      const dataUrl = await toPng(previewRef.current, { pixelRatio: 2 });
+      const target = RATIOS[format];
+      const dataUrl = await toPng(previewRef.current, {
+        canvasWidth: target.w,
+        canvasHeight: target.h,
+        pixelRatio: 1,
+      });
       const link = document.createElement("a");
       link.download = `portada-${category}-${format}.png`;
       link.href = dataUrl;
@@ -792,14 +803,88 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="toggle-row">
-            <div>
-              <div className="toggle-row-title">Marca de agua</div>
-              <div className="toggle-row-sub">Logo discreto en la esquina</div>
+          <div className="stack">
+            <div className="label">6 · Marca de agua</div>
+            <div className="toggle-row">
+              <div>
+                <div className="toggle-row-title">Mostrar marca de agua</div>
+                <div className="toggle-row-sub">
+                  {watermarkUrl ? "Tu logo, en la esquina" : "Sube tu logo abajo"}
+                </div>
+              </div>
+              <button className={"switch" + (watermark ? " on" : "")} onClick={() => setWatermark((w) => !w)}>
+                <div className="switch-knob" />
+              </button>
             </div>
-            <button className={"switch" + (watermark ? " on" : "")} onClick={() => setWatermark((w) => !w)}>
-              <div className="switch-knob" />
-            </button>
+            <input
+              ref={watermarkInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              style={{ display: "none" }}
+              onChange={async (e) => {
+                const f = e.target.files?.[0] || null;
+                e.target.value = "";
+                if (!f) return;
+                pickImage(watermarkUrlRef, setWatermarkUrl, await stripBackground(f));
+                setWatermark(true);
+              }}
+            />
+            {!watermarkUrl ? (
+              <button className="dropzone" onClick={() => watermarkInputRef.current?.click()}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c9a24b" strokeWidth="1.6">
+                  <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
+                  <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                </svg>
+                <div className="dropzone-title">Subir logo del proyecto</div>
+                <div className="dropzone-sub">Se le quita el fondo automáticamente</div>
+              </button>
+            ) : (
+              <>
+                <div className="photo-card">
+                  <div className="photo-thumb">
+                    <img src={watermarkUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                  </div>
+                  <div className="photo-meta">
+                    <div className="photo-name">Logo del proyecto</div>
+                    <div className="photo-status">Arrástralo en la portada para colocarlo</div>
+                  </div>
+                  <button
+                    className="photo-remove"
+                    onClick={() => clearImage(watermarkUrlRef, setWatermarkUrl)}
+                    aria-label="Quitar logo"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="blur-row">
+                  <span className="crest-label">Tamaño</span>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="3"
+                    step="0.05"
+                    value={watermarkScale}
+                    onChange={(e) => setWatermarkScale(Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{Math.round(watermarkScale * 100)}%</span>
+                </div>
+                <div className="blur-row">
+                  <span className="crest-label">Opacidad</span>
+                  <input
+                    type="range"
+                    min="15"
+                    max="100"
+                    value={watermarkOpacity}
+                    onChange={(e) => setWatermarkOpacity(Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{watermarkOpacity}%</span>
+                </div>
+              </>
+            )}
           </div>
 
           <button
@@ -829,21 +914,25 @@ export default function Home() {
                 <img src={bgUrl} alt="" style={{ filter: `blur(${bgBlur}px) brightness(.55)` }} />
               </div>
             )}
+            <div
+              className="color-wash"
+              style={{ background: `linear-gradient(155deg,${accent}59 0%,${accent}22 38%,transparent 72%)` }}
+            />
             <div className="grain" />
             <div
               className="wash"
-              style={{ background: `radial-gradient(circle at 68% 38%,${accent}1a 0%,transparent 55%)` }}
+              style={{ background: `radial-gradient(circle at 68% 38%,${accent}30 0%,transparent 58%)` }}
             />
             <div
               className="diagonal-sweep"
               style={{
                 clipPath: SWEEP_SHAPES[category],
-                background: `linear-gradient(135deg,${accent}4d 0%,${accent}26 100%)`,
+                background: `linear-gradient(135deg,${accent}70 0%,${accent}38 100%)`,
               }}
             />
             <div
               className="accent-circle"
-              style={{ background: `radial-gradient(circle,${accent}22 0%,transparent 72%)` }}
+              style={{ background: `radial-gradient(circle,${accent}38 0%,transparent 72%)` }}
             />
             <div className="accent-line" />
 
@@ -930,7 +1019,19 @@ export default function Home() {
               </>
             )}
 
-            {watermark && generated && <div className="watermark">MADG</div>}
+            {watermark && generated && watermarkUrl && (
+              <div
+                className="watermark-logo"
+                style={{
+                  ...styleFor("watermark"),
+                  width: watermarkScale * 9 + "%",
+                  opacity: watermarkOpacity / 100,
+                }}
+                onPointerDown={startDrag("watermark")}
+              >
+                <img src={watermarkUrl} alt="" />
+              </div>
+            )}
 
             <div className={"safe-margin" + (dragActive ? " show" : "")} />
             <div className={"snap-guide" + (guides.v ? " show" : "")} id="guideV" />
@@ -1058,6 +1159,7 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .ring{width:26px;height:26px;border-radius:50%;border:2.5px solid var(--border-strong);border-top-color:var(--gold);animation:spin .8s linear infinite;}
 .stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:48px;background:radial-gradient(ellipse at 50% 40%,var(--bg-2) 0%,var(--bg) 70%);min-width:0;}
 .preview{width:min(100%,860px);position:relative;border-radius:6px;overflow:hidden;box-shadow:0 30px 80px -20px rgba(0,0,0,0.6),0 0 0 1px var(--border-strong);background:linear-gradient(160deg,#141210 0%,#0a0908 60%,#060505 100%);container-type:inline-size;}
+.color-wash{position:absolute;inset:0;pointer-events:none;}
 .custom-bg{position:absolute;inset:-4%;pointer-events:none;overflow:hidden;}
 .custom-bg img{width:100%;height:100%;object-fit:cover;}
 .blur-row{display:flex;align-items:center;gap:10px;padding:2px 2px;}
@@ -1084,15 +1186,16 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .team-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .team-label{font-family:var(--font-sans);font-size:10px;letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase;}
 .empty-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);font-size:12px;color:var(--text-faint);text-align:center;letter-spacing:.04em;line-height:1.5;}
-.watermark{position:absolute;right:4%;bottom:4%;font-family:var(--font-display);font-size:11px;letter-spacing:.08em;color:rgba(243,237,224,.4);}
+.watermark-logo{position:absolute;right:4%;bottom:4%;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));}
+.watermark-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .photo-frame{position:absolute;overflow:hidden;}
 .photo-frame img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.15) brightness(.92);display:block;}
 .photo-frame-individual{right:6%;bottom:0;width:46%;height:92%;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-colectivo{left:50%;bottom:0;width:60%;height:80%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-partido{left:50%;bottom:0;width:46%;height:74%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 20%);mask-image:linear-gradient(to bottom,transparent 0%,black 20%);}
-.jornada-pill,.crest-mark,.crest-logo,.team-tag,.league-mark{cursor:grab;touch-action:none;}
-.jornada-pill:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
-.jornada-pill:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
+.jornada-pill,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo{cursor:grab;touch-action:none;}
+.jornada-pill:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
+.jornada-pill:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
 .safe-margin{position:absolute;inset:6%;border:1px dashed rgba(243,237,224,.3);pointer-events:none;opacity:0;transition:opacity .15s ease;border-radius:2px;}
 .safe-margin.show{opacity:1;}
 .snap-guide{position:absolute;background:var(--gold);opacity:0;pointer-events:none;transition:opacity .08s ease;box-shadow:0 0 6px rgba(201,162,75,.6);}
