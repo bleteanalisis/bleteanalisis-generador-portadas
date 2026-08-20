@@ -5,11 +5,24 @@ import { toPng } from "html-to-image";
 
 const ACCENT_MAP = { partido: "#c9a24b", individual: "#b23a2f", colectivo: "#3a6a8c" };
 const COLOR_NAMES = { "#c9a24b": "Dorado", "#b23a2f": "Rojo", "#3a6a8c": "Azul", "#3a8c5a": "Verde", "#6a3a8c": "Morado" };
-const SWEEP_SHAPES = {
-  partido: "polygon(20% 0%,42% 0%,70% 100%,48% 100%)",
-  individual: "polygon(0% 0%,36% 0%,12% 100%,0% 100%)",
-  colectivo: "polygon(0% 100%,100% 48%,100% 100%)",
+// Bandas de color con bordes difuminados (antes eran polígonos de corte duro).
+const SWEEPS = {
+  partido: (c, a, half) =>
+    `linear-gradient(108deg, transparent 18%, ${c}${half} 30%, ${c}${a} 42%, ${c}${a} 54%, ${c}${half} 66%, transparent 78%)`,
+  individual: (c, a, half) =>
+    `linear-gradient(96deg, ${c}${a} 0%, ${c}${a} 14%, ${c}${half} 28%, transparent 48%)`,
+  colectivo: (c, a, half) =>
+    `linear-gradient(6deg, ${c}${a} 0%, ${c}${half} 26%, transparent 58%)`,
 };
+const SNAP_LINES = [6, 25, 33.333, 50, 66.667, 75, 94];
+const TEXT_COLORS = ["#f3ede4", "#c9a24b", "#b23a2f", "#3a6a8c", "#0b0a09"];
+const LS_WATERMARK = "madg.watermark";
+const LS_SETTINGS = "madg.settings";
+const LS_TEMPLATES = "madg.templates";
+const hexAlpha = (pct) =>
+  Math.max(0, Math.min(255, Math.round((pct / 100) * 255)))
+    .toString(16)
+    .padStart(2, "0");
 const JORNADA_STYLES = {
   limpio: "Limpio",
   serif: "Serif",
@@ -40,7 +53,7 @@ export default function Home() {
   const [customColor, setCustomColor] = useState(null);
   const [jornadaText, setJornadaText] = useState("Jornada 14");
   const [positions, setPositions] = useState({});
-  const [guides, setGuides] = useState({ v: false, h: false });
+  const [guides, setGuides] = useState({ x: null, y: null });
   const [dragActive, setDragActive] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -60,197 +73,351 @@ export default function Home() {
   const [showVsLine, setShowVsLine] = useState(false);
   const [jornadaStyle, setJornadaStyle] = useState("limpio");
   const [jornadaSize, setJornadaSize] = useState(1);
+  const [jornadaColor, setJornadaColor] = useState(null);
   const [vsStyle, setVsStyle] = useState("serif");
   const [vsSize, setVsSize] = useState(1);
+  const [vsColor, setVsColor] = useState(null);
+  const [sweepIntensity, setSweepIntensity] = useState(38);
+  const [showAccentLine, setShowAccentLine] = useState(false);
+  const [lastDragged, setLastDragged] = useState(null);
   const [photoScale, setPhotoScale] = useState(1);
   const [photoOffsetY, setPhotoOffsetY] = useState(0);
   const [watermarkUrl, setWatermarkUrl] = useState(null);
   const [watermarkScale, setWatermarkScale] = useState(1);
   const [watermarkOpacity, setWatermarkOpacity] = useState(55);
 
+  const [templates, setTemplates] = useState([]);
+  const [templateName, setTemplateName] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [toast, setToast] = useState(null);
+
   const previewRef = useRef(null);
   const fileInputRef = useRef(null);
-  const objectUrlRef = useRef(null);
-
   const crestAInputRef = useRef(null);
   const crestBInputRef = useRef(null);
   const leagueInputRef = useRef(null);
   const teamCrestInputRef = useRef(null);
-  const crestAUrlRef = useRef(null);
-  const crestBUrlRef = useRef(null);
-  const leagueUrlRef = useRef(null);
-  const teamCrestUrlRef = useRef(null);
-  const bgUrlRef = useRef(null);
   const bgInputRef = useRef(null);
-  const watermarkUrlRef = useRef(null);
   const watermarkInputRef = useRef(null);
   const colectivoInputRef = useRef(null);
-  const colectivoUrlsRef = useRef([]);
 
+  const historyRef = useRef([]);
+
+  // Al abrir: recupera el logo del proyecto, los ajustes y las plantillas.
   useEffect(() => {
-    return () => {
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-      if (crestAUrlRef.current) URL.revokeObjectURL(crestAUrlRef.current);
-      if (crestBUrlRef.current) URL.revokeObjectURL(crestBUrlRef.current);
-      if (leagueUrlRef.current) URL.revokeObjectURL(leagueUrlRef.current);
-      if (teamCrestUrlRef.current) URL.revokeObjectURL(teamCrestUrlRef.current);
-      if (bgUrlRef.current) URL.revokeObjectURL(bgUrlRef.current);
-      if (watermarkUrlRef.current) URL.revokeObjectURL(watermarkUrlRef.current);
-      colectivoUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
-    };
+    try {
+      const wm = localStorage.getItem(LS_WATERMARK);
+      if (wm) setWatermarkUrl(wm);
+      const saved = localStorage.getItem(LS_SETTINGS);
+      if (saved) applySettings(JSON.parse(saved));
+      const tpl = localStorage.getItem(LS_TEMPLATES);
+      if (tpl) setTemplates(JSON.parse(tpl));
+    } catch (err) {
+      console.warn("No se pudieron recuperar los ajustes guardados", err);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function stripBackground(file) {
-    return new Promise((resolve) => {
-      if (!file || !file.type.startsWith("image/") || file.type === "image/svg+xml") {
-        resolve(file);
-        return;
+  // --- Ajustes que se guardan en una plantilla o entre sesiones ---
+  const settings = {
+    format,
+    customColor,
+    autoAccent,
+    jornadaText,
+    showJornada,
+    showVs,
+    showVsLine,
+    jornadaStyle,
+    jornadaSize,
+    jornadaColor,
+    vsStyle,
+    vsSize,
+    vsColor,
+    sweepIntensity,
+    showAccentLine,
+    crestScale,
+    leagueScale,
+    teamCrestScale,
+    bgBlur,
+    photoScale,
+    photoOffsetY,
+    watermark,
+    watermarkScale,
+    watermarkOpacity,
+    positions,
+  };
+
+  function applySettings(s) {
+    if (!s) return;
+    if (s.format) setFormat(s.format);
+    setCustomColor(s.customColor ?? null);
+    setAutoAccent(s.autoAccent ?? null);
+    if (typeof s.jornadaText === "string") setJornadaText(s.jornadaText);
+    if (typeof s.showJornada === "boolean") setShowJornada(s.showJornada);
+    if (typeof s.showVs === "boolean") setShowVs(s.showVs);
+    if (typeof s.showVsLine === "boolean") setShowVsLine(s.showVsLine);
+    if (s.jornadaStyle) setJornadaStyle(s.jornadaStyle);
+    if (typeof s.jornadaSize === "number") setJornadaSize(s.jornadaSize);
+    setJornadaColor(s.jornadaColor ?? null);
+    if (s.vsStyle) setVsStyle(s.vsStyle);
+    if (typeof s.vsSize === "number") setVsSize(s.vsSize);
+    setVsColor(s.vsColor ?? null);
+    if (typeof s.sweepIntensity === "number") setSweepIntensity(s.sweepIntensity);
+    if (typeof s.showAccentLine === "boolean") setShowAccentLine(s.showAccentLine);
+    if (typeof s.crestScale === "number") setCrestScale(s.crestScale);
+    if (typeof s.leagueScale === "number") setLeagueScale(s.leagueScale);
+    if (typeof s.teamCrestScale === "number") setTeamCrestScale(s.teamCrestScale);
+    if (typeof s.bgBlur === "number") setBgBlur(s.bgBlur);
+    if (typeof s.photoScale === "number") setPhotoScale(s.photoScale);
+    if (typeof s.photoOffsetY === "number") setPhotoOffsetY(s.photoOffsetY);
+    if (typeof s.watermark === "boolean") setWatermark(s.watermark);
+    if (typeof s.watermarkScale === "number") setWatermarkScale(s.watermarkScale);
+    if (typeof s.watermarkOpacity === "number") setWatermarkOpacity(s.watermarkOpacity);
+    setPositions(s.positions || {});
+  }
+
+  const settingsJson = JSON.stringify(settings);
+
+  // Guarda ajustes e historial cada vez que cambia algo. Al deshacer no se
+  // duplica nada porque el estado restaurado ya es la cima de la pila.
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_SETTINGS, settingsJson);
+    } catch {}
+    const stack = historyRef.current;
+    if (stack[stack.length - 1] !== settingsJson) {
+      stack.push(settingsJson);
+      if (stack.length > 60) stack.shift();
+    }
+  }, [settingsJson]);
+
+  // Guarda el logo del proyecto aparte, para que siga ahí al volver.
+  useEffect(() => {
+    try {
+      if (watermarkUrl) localStorage.setItem(LS_WATERMARK, watermarkUrl);
+      else localStorage.removeItem(LS_WATERMARK);
+    } catch {
+      showToast("El logo es muy pesado para recordarlo entre sesiones");
+    }
+  }, [watermarkUrl]);
+
+  // Deshacer con Cmd+Z / Ctrl+Z.
+  useEffect(() => {
+    function onKey(e) {
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        const stack = historyRef.current;
+        if (stack.length < 2) return;
+        stack.pop();
+        const prev = stack[stack.length - 1];
+        applySettings(JSON.parse(prev));
+        showToast("Deshecho");
       }
-      const img = new window.Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        try {
-          const maxDim = 700;
-          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-          const w = Math.max(1, Math.round(img.width * scale));
-          const h = Math.max(1, Math.round(img.height * scale));
-          const canvas = document.createElement("canvas");
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, w, h);
-          URL.revokeObjectURL(url);
-          const data = ctx.getImageData(0, 0, w, h);
-          const px = data.data;
-          const sample = (x, y) => {
-            const i = (y * w + x) * 4;
-            return [px[i], px[i + 1], px[i + 2], px[i + 3]];
-          };
-          const corners = [sample(1, 1), sample(w - 2, 1), sample(1, h - 2), sample(w - 2, h - 2)];
-          const avgAlpha = corners.reduce((a, c) => a + c[3] / 4, 0);
-          if (avgAlpha < 40) {
-            resolve(file);
-            return;
-          }
-          const bg = corners.reduce((a, c) => [a[0] + c[0] / 4, a[1] + c[1] / 4, a[2] + c[2] / 4], [0, 0, 0]);
-          const dist = (r, g, b) => Math.sqrt((r - bg[0]) ** 2 + (g - bg[1]) ** 2 + (b - bg[2]) ** 2);
-          const T1 = 38;
-          const T2 = 100;
-          for (let i = 0; i < px.length; i += 4) {
-            const d = dist(px[i], px[i + 1], px[i + 2]);
-            if (d < T1) {
-              px[i + 3] = 0;
-            } else if (d < T2) {
-              px[i + 3] = Math.round(px[i + 3] * ((d - T1) / (T2 - T1)));
-            }
-          }
-          ctx.putImageData(data, 0, 0);
-          canvas.toBlob((blob) => {
-            if (!blob) {
-              resolve(file);
-              return;
-            }
-            resolve(new File([blob], file.name.replace(/\.[^.]+$/, "") + "-sinfondo.png", { type: "image/png" }));
-          }, "image/png");
-        } catch (err) {
-          console.error("No se pudo quitar el fondo", err);
-          resolve(file);
-        }
-      };
-      img.onerror = () => resolve(file);
-      img.src = url;
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function saveTemplate() {
+    const name = templateName.trim();
+    if (!name) {
+      showToast("Ponle un nombre a la plantilla");
+      return;
+    }
+    const tpl = {
+      id: Date.now(),
+      name,
+      category,
+      settings: JSON.parse(settingsJson),
+      crestAUrl,
+      crestBUrl,
+      leagueUrl,
+      teamCrestUrl,
+    };
+    const next = [...templates.filter((t) => t.name !== name), tpl];
+    try {
+      localStorage.setItem(LS_TEMPLATES, JSON.stringify(next));
+      setTemplates(next);
+      setTemplateName("");
+      setSavingTemplate(false);
+      showToast(`Plantilla «${name}» guardada`);
+    } catch {
+      // Sin espacio: reintenta guardando solo los ajustes, sin los escudos.
+      const light = { ...tpl, crestAUrl: null, crestBUrl: null, leagueUrl: null, teamCrestUrl: null };
+      const nextLight = [...templates.filter((t) => t.name !== name), light];
+      try {
+        localStorage.setItem(LS_TEMPLATES, JSON.stringify(nextLight));
+        setTemplates(nextLight);
+        setTemplateName("");
+        setSavingTemplate(false);
+        showToast("Guardada sin los escudos (no cabían)");
+      } catch {
+        showToast("No hay espacio para más plantillas");
+      }
+    }
+  }
+
+  function loadTemplate(tpl) {
+    if (tpl.category) setCategory(tpl.category);
+    if (tpl.crestAUrl !== undefined) setCrestAUrl(tpl.crestAUrl);
+    if (tpl.crestBUrl !== undefined) setCrestBUrl(tpl.crestBUrl);
+    if (tpl.leagueUrl !== undefined) setLeagueUrl(tpl.leagueUrl);
+    if (tpl.teamCrestUrl !== undefined) setTeamCrestUrl(tpl.teamCrestUrl);
+    applySettings(tpl.settings);
+    setGenerated(false);
+    showToast(`Plantilla «${tpl.name}» cargada`);
+  }
+
+  function deleteTemplate(id) {
+    const next = templates.filter((t) => t.id !== id);
+    try {
+      localStorage.setItem(LS_TEMPLATES, JSON.stringify(next));
+    } catch {}
+    setTemplates(next);
+  }
+
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2600);
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
   }
 
-  function extractAccentColor(file) {
-    return new Promise((resolve) => {
-      if (!file || !file.type.startsWith("image/")) {
-        resolve(null);
-        return;
-      }
+  function loadImageEl(src) {
+    return new Promise((resolve, reject) => {
       const img = new window.Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        try {
-          const size = 80;
-          const canvas = document.createElement("canvas");
-          canvas.width = size;
-          canvas.height = size;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, size, size);
-          URL.revokeObjectURL(url);
-          const { data } = ctx.getImageData(0, 0, size, size);
-          let r = 0,
-            g = 0,
-            b = 0,
-            count = 0;
-          for (let i = 0; i < data.length; i += 4) {
-            const rr = data[i];
-            const gg = data[i + 1];
-            const bb = data[i + 2];
-            const aa = data[i + 3];
-            if (aa < 100) continue;
-            const max = Math.max(rr, gg, bb);
-            const min = Math.min(rr, gg, bb);
-            if (max - min < 40 || max < 40 || max > 250) continue;
-            r += rr;
-            g += gg;
-            b += bb;
-            count++;
-          }
-          if (count < 10) {
-            resolve(null);
-            return;
-          }
-          r = Math.round(r / count);
-          g = Math.round(g / count);
-          b = Math.round(b / count);
-          const hex =
-            "#" +
-            [r, g, b]
-              .map((v) => v.toString(16).padStart(2, "0"))
-              .join("");
-          resolve(hex);
-        } catch (err) {
-          resolve(null);
-        }
-      };
-      img.onerror = () => resolve(null);
-      img.src = url;
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
     });
   }
 
-  function pickImage(urlRef, setter, file) {
+  // Reduce la imagen y devuelve un data URL (sobrevive al recargar la página).
+  async function processPhoto(file, maxDim = 1600) {
+    const raw = await fileToDataUrl(file);
+    try {
+      const img = await loadImageEl(raw);
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      if (scale === 1 && raw.length < 900000) return raw;
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      return canvas.toDataURL("image/jpeg", 0.86);
+    } catch {
+      return raw;
+    }
+  }
+
+  // Escudos y logos: reduce y hace transparente el color de fondo.
+  async function processLogo(file, maxDim = 600) {
+    const raw = await fileToDataUrl(file);
+    if (file.type === "image/svg+xml") return raw;
+    try {
+      const img = await loadImageEl(raw);
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h);
+      const px = data.data;
+      const sample = (x, y) => {
+        const i = (y * w + x) * 4;
+        return [px[i], px[i + 1], px[i + 2], px[i + 3]];
+      };
+      const corners = [sample(1, 1), sample(w - 2, 1), sample(1, h - 2), sample(w - 2, h - 2)];
+      const avgAlpha = corners.reduce((a, c) => a + c[3] / 4, 0);
+      if (avgAlpha < 40) return canvas.toDataURL("image/png");
+      const bg = corners.reduce((a, c) => [a[0] + c[0] / 4, a[1] + c[1] / 4, a[2] + c[2] / 4], [0, 0, 0]);
+      const dist = (r, g, b) => Math.sqrt((r - bg[0]) ** 2 + (g - bg[1]) ** 2 + (b - bg[2]) ** 2);
+      const T1 = 38;
+      const T2 = 100;
+      for (let i = 0; i < px.length; i += 4) {
+        const d = dist(px[i], px[i + 1], px[i + 2]);
+        if (d < T1) px[i + 3] = 0;
+        else if (d < T2) px[i + 3] = Math.round(px[i + 3] * ((d - T1) / (T2 - T1)));
+      }
+      ctx.putImageData(data, 0, 0);
+      return canvas.toDataURL("image/png");
+    } catch {
+      return raw;
+    }
+  }
+
+  async function accentFromDataUrl(src) {
+    try {
+      const img = await loadImageEl(src);
+      const size = 80;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, size, size);
+      const { data } = ctx.getImageData(0, 0, size, size);
+      let r = 0,
+        g = 0,
+        b = 0,
+        count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const rr = data[i];
+        const gg = data[i + 1];
+        const bb = data[i + 2];
+        if (data[i + 3] < 100) continue;
+        const max = Math.max(rr, gg, bb);
+        const min = Math.min(rr, gg, bb);
+        if (max - min < 40 || max < 40 || max > 250) continue;
+        r += rr;
+        g += gg;
+        b += bb;
+        count++;
+      }
+      if (count < 10) return null;
+      return (
+        "#" +
+        [r / count, g / count, b / count]
+          .map((v) => Math.round(v).toString(16).padStart(2, "0"))
+          .join("")
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  async function pickLogo(setter, file, useAsAccent) {
     if (!file) return;
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    const url = URL.createObjectURL(file);
-    urlRef.current = url;
-    setter(url);
+    const src = await processLogo(file);
+    if (useAsAccent) {
+      const color = await accentFromDataUrl(src);
+      if (color) setAutoAccent(color);
+    }
+    setter(src);
   }
 
-  function clearImage(urlRef, setter) {
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    urlRef.current = null;
-    setter(null);
-  }
-
-  function addColectivoPhoto(file) {
+  async function addColectivoPhoto(file) {
     if (!file || colectivoPhotos.length >= 3) return;
-    const url = URL.createObjectURL(file);
-    colectivoUrlsRef.current.push(url);
-    setColectivoPhotos((list) => [...list, { url, name: file.name }]);
+    const src = await processPhoto(file);
+    setColectivoPhotos((list) => (list.length >= 3 ? list : [...list, { url: src, name: file.name }]));
     resetForNewPhoto();
   }
 
   function removeColectivoPhoto(index) {
-    setColectivoPhotos((list) => {
-      const item = list[index];
-      if (item) {
-        URL.revokeObjectURL(item.url);
-        colectivoUrlsRef.current = colectivoUrlsRef.current.filter((u) => u !== item.url);
-      }
-      return list.filter((_, i) => i !== index);
-    });
+    setColectivoPhotos((list) => list.filter((_, i) => i !== index));
     resetForNewPhoto();
   }
 
@@ -263,19 +430,15 @@ export default function Home() {
 
   function selectCategory(cat) {
     setCategory(cat);
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    objectUrlRef.current = null;
     setPhotoUrl(null);
     setPhotoName("");
     setGenerated(false);
     setGenerating(false);
     setPositions({});
-    clearImage(crestAUrlRef, setCrestAUrl);
-    clearImage(crestBUrlRef, setCrestBUrl);
-    clearImage(leagueUrlRef, setLeagueUrl);
-    clearImage(teamCrestUrlRef, setTeamCrestUrl);
-    colectivoUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
-    colectivoUrlsRef.current = [];
+    setCrestAUrl(null);
+    setCrestBUrl(null);
+    setLeagueUrl(null);
+    setTeamCrestUrl(null);
     setColectivoPhotos([]);
     setCrestScale(1);
     setLeagueScale(1);
@@ -288,23 +451,24 @@ export default function Home() {
     setShowVsLine(false);
     setJornadaStyle("limpio");
     setJornadaSize(1);
+    setJornadaColor(null);
     setVsStyle("serif");
     setVsSize(1);
+    setVsColor(null);
+    setSweepIntensity(38);
+    setShowAccentLine(false);
+    setLastDragged(null);
   }
 
-  function handleFileChosen(file) {
+  async function handleFileChosen(file) {
     if (!file) return;
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    const url = URL.createObjectURL(file);
-    objectUrlRef.current = url;
-    setPhotoUrl(url);
+    const src = await processPhoto(file);
+    setPhotoUrl(src);
     setPhotoName(file.name);
     resetForNewPhoto();
   }
 
   function removePhoto() {
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    objectUrlRef.current = null;
     setPhotoUrl(null);
     setPhotoName("");
     resetForNewPhoto();
@@ -362,6 +526,7 @@ export default function Home() {
       const startTop = ((centerY - cRect0.top) / cRect0.height) * 100;
       setPositions((p) => ({ ...p, [key]: { left: startLeft, top: startTop } }));
       setDragActive(true);
+      setLastDragged(key);
       target.setPointerCapture(e.pointerId);
 
       function onMove(ev) {
@@ -372,23 +537,31 @@ export default function Home() {
         let tp = ((cy - cRect.top) / cRect.height) * 100;
         lp = Math.max(3, Math.min(97, lp));
         tp = Math.max(3, Math.min(97, tp));
-        let vShow = false;
-        let hShow = false;
-        if (Math.abs(lp - 50) < 1.6) {
-          lp = 50;
-          vShow = true;
+
+        let guideX = null;
+        let guideY = null;
+        for (const line of SNAP_LINES) {
+          if (Math.abs(lp - line) < 1.4) {
+            lp = line;
+            guideX = line;
+            break;
+          }
         }
-        if (Math.abs(tp - 50) < 1.6) {
-          tp = 50;
-          hShow = true;
+        for (const line of SNAP_LINES) {
+          if (Math.abs(tp - line) < 1.4) {
+            tp = line;
+            guideY = line;
+            break;
+          }
         }
+
         setPositions((p) => ({ ...p, [key]: { left: lp, top: tp } }));
-        setGuides({ v: vShow, h: hShow });
+        setGuides({ x: guideX, y: guideY });
       }
       function onUp(ev) {
         target.releasePointerCapture(ev.pointerId);
         setDragActive(false);
-        setGuides({ v: false, h: false });
+        setGuides({ x: null, y: null });
         target.removeEventListener("pointermove", onMove);
         target.removeEventListener("pointerup", onUp);
       }
@@ -399,20 +572,25 @@ export default function Home() {
 
   function resetPositions() {
     setPositions({});
+    setLastDragged(null);
+  }
+
+  function alignLast(axis, value) {
+    if (!lastDragged) return;
+    setPositions((p) => {
+      const cur = p[lastDragged] || { left: 50, top: 50 };
+      return { ...p, [lastDragged]: { ...cur, [axis]: value } };
+    });
   }
 
   function resetAll() {
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    objectUrlRef.current = null;
-    colectivoUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
-    colectivoUrlsRef.current = [];
-    clearImage(crestAUrlRef, setCrestAUrl);
-    clearImage(crestBUrlRef, setCrestBUrl);
-    clearImage(leagueUrlRef, setLeagueUrl);
-    clearImage(teamCrestUrlRef, setTeamCrestUrl);
-    clearImage(bgUrlRef, setBgUrl);
-    clearImage(watermarkUrlRef, setWatermarkUrl);
-
+    setCrestAUrl(null);
+    setCrestBUrl(null);
+    setLeagueUrl(null);
+    setTeamCrestUrl(null);
+    setBgUrl(null);
+    setWatermarkUrl(null);
+    setColectivoPhotos([]);
     setPhotoUrl(null);
     setPhotoName("");
     setColectivoPhotos([]);
@@ -427,8 +605,13 @@ export default function Home() {
     setShowVsLine(false);
     setJornadaStyle("limpio");
     setJornadaSize(1);
+    setJornadaColor(null);
     setVsStyle("serif");
     setVsSize(1);
+    setVsColor(null);
+    setSweepIntensity(38);
+    setShowAccentLine(false);
+    setLastDragged(null);
     setPhotoScale(1);
     setPhotoOffsetY(0);
     setCrestScale(1);
@@ -493,6 +676,8 @@ export default function Home() {
     <div className="app">
       <style>{CSS}</style>
 
+      {toast && <div className="toast">{toast}</div>}
+
       <div className="topbar">
         <div className="brand">
           <div className="brand-name">Más Allá del Gol</div>
@@ -507,6 +692,52 @@ export default function Home() {
 
       <div className="body">
         <div className="panel">
+          <div className="stack">
+            <div className="label">Plantillas</div>
+            {templates.length > 0 && (
+              <div className="tpl-list">
+                {templates.map((t) => (
+                  <div className="tpl-item" key={t.id}>
+                    <button className="tpl-load" onClick={() => loadTemplate(t)}>
+                      {t.name}
+                    </button>
+                    <button
+                      className="tpl-del"
+                      onClick={() => deleteTemplate(t.id)}
+                      aria-label={`Borrar ${t.name}`}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {savingTemplate ? (
+              <div className="tpl-save-row">
+                <input
+                  className="field-static field-input"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveTemplate()}
+                  placeholder="Nombre (ej. LaLiga)"
+                  autoFocus
+                />
+                <button className="align-btn" onClick={saveTemplate}>
+                  Guardar
+                </button>
+                <button className="align-btn" onClick={() => setSavingTemplate(false)}>
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button className="tpl-new" onClick={() => setSavingTemplate(true)}>
+                + Guardar ajustes actuales como plantilla
+              </button>
+            )}
+          </div>
+
           <div className="stack">
             <div className="label">Tipo de portada</div>
             <div className="tabs">
@@ -644,7 +875,7 @@ export default function Home() {
                     const f = e.target.files?.[0] || null;
                     e.target.value = "";
                     if (!f) return;
-                    pickImage(crestAUrlRef, setCrestAUrl, await stripBackground(f));
+                    await pickLogo(setCrestAUrl, f, false);
                   }}
                 />
                 <button type="button" className="crest-slot" onClick={() => crestAInputRef.current?.click()}>
@@ -664,7 +895,7 @@ export default function Home() {
                     const f = e.target.files?.[0] || null;
                     e.target.value = "";
                     if (!f) return;
-                    pickImage(crestBUrlRef, setCrestBUrl, await stripBackground(f));
+                    await pickLogo(setCrestBUrl, f, false);
                   }}
                 />
                 <button type="button" className="crest-slot" onClick={() => crestBInputRef.current?.click()}>
@@ -700,9 +931,7 @@ export default function Home() {
                   const f = e.target.files?.[0] || null;
                   e.target.value = "";
                   if (!f) return;
-                  const color = await extractAccentColor(f);
-                  if (color) setAutoAccent(color);
-                  pickImage(leagueUrlRef, setLeagueUrl, await stripBackground(f));
+                  await pickLogo(setLeagueUrl, f, true);
                 }}
               />
               <button type="button" className="league-row" onClick={() => leagueInputRef.current?.click()}>
@@ -764,6 +993,24 @@ export default function Home() {
                     />
                     <span className="blur-value">{Math.round(jornadaSize * 100)}%</span>
                   </div>
+                  <div className="blur-row">
+                    <span className="crest-label">Color</span>
+                    <div className="mini-swatches">
+                      <button
+                        className={"mini-swatch auto" + (!jornadaColor ? " active" : "")}
+                        onClick={() => setJornadaColor(null)}
+                        title="Automático"
+                      />
+                      {TEXT_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          className={"mini-swatch" + (jornadaColor === c ? " active" : "")}
+                          style={{ background: c }}
+                          onClick={() => setJornadaColor(c)}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -799,6 +1046,24 @@ export default function Home() {
                     />
                     <span className="blur-value">{Math.round(vsSize * 100)}%</span>
                   </div>
+                  <div className="blur-row">
+                    <span className="crest-label">Color</span>
+                    <div className="mini-swatches">
+                      <button
+                        className={"mini-swatch auto" + (!vsColor ? " active" : "")}
+                        onClick={() => setVsColor(null)}
+                        title="Automático"
+                      />
+                      {TEXT_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          className={"mini-swatch" + (vsColor === c ? " active" : "")}
+                          style={{ background: c }}
+                          onClick={() => setVsColor(c)}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -823,9 +1088,7 @@ export default function Home() {
                   const f = e.target.files?.[0] || null;
                   e.target.value = "";
                   if (!f) return;
-                  const color = await extractAccentColor(f);
-                  if (color) setAutoAccent(color);
-                  pickImage(teamCrestUrlRef, setTeamCrestUrl, await stripBackground(f));
+                  await pickLogo(setTeamCrestUrl, f, true);
                 }}
               />
               <button type="button" className="toggle-row" style={{ width: "100%", textAlign: "left" }} onClick={() => teamCrestInputRef.current?.click()}>
@@ -868,9 +1131,7 @@ export default function Home() {
                   const f = e.target.files?.[0] || null;
                   e.target.value = "";
                   if (!f) return;
-                  const color = await extractAccentColor(f);
-                  if (color) setAutoAccent(color);
-                  pickImage(teamCrestUrlRef, setTeamCrestUrl, await stripBackground(f));
+                  await pickLogo(setTeamCrestUrl, f, true);
                 }}
               />
               <button type="button" className="league-row" onClick={() => teamCrestInputRef.current?.click()}>
@@ -927,6 +1188,27 @@ export default function Home() {
                   : "Automático — según la categoría"}
               </span>
             </div>
+            <div className="blur-row">
+              <span className="crest-label">Intensidad</span>
+              <input
+                type="range"
+                min="0"
+                max="80"
+                value={sweepIntensity}
+                onChange={(e) => setSweepIntensity(Number(e.target.value))}
+                className="blur-slider"
+              />
+              <span className="blur-value">{sweepIntensity}%</span>
+            </div>
+            <div className="toggle-row">
+              <div className="toggle-row-title">Línea decorativa</div>
+              <button
+                className={"switch" + (showAccentLine ? " on" : "")}
+                onClick={() => setShowAccentLine((v) => !v)}
+              >
+                <div className="switch-knob" />
+              </button>
+            </div>
           </div>
 
           <div className="stack">
@@ -936,7 +1218,12 @@ export default function Home() {
               type="file"
               accept="image/png,image/jpeg,image/webp"
               style={{ display: "none" }}
-              onChange={(e) => pickImage(bgUrlRef, setBgUrl, e.target.files?.[0] || null)}
+              onChange={async (e) => {
+                const f = e.target.files?.[0] || null;
+                e.target.value = "";
+                if (!f) return;
+                setBgUrl(await processPhoto(f, 1800));
+              }}
             />
             {!bgUrl ? (
               <button className="dropzone" onClick={() => bgInputRef.current?.click()}>
@@ -958,7 +1245,7 @@ export default function Home() {
                     <div className="photo-name">Fondo personalizado</div>
                     <div className="photo-status">Sustituye el fondo automático</div>
                   </div>
-                  <button className="photo-remove" onClick={() => clearImage(bgUrlRef, setBgUrl)} aria-label="Quitar fondo">
+                  <button className="photo-remove" onClick={() => setBgUrl(null)} aria-label="Quitar fondo">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M18 6L6 18M6 6l12 12" />
                     </svg>
@@ -1014,7 +1301,7 @@ export default function Home() {
                 const f = e.target.files?.[0] || null;
                 e.target.value = "";
                 if (!f) return;
-                pickImage(watermarkUrlRef, setWatermarkUrl, await stripBackground(f));
+                await pickLogo(setWatermarkUrl, f, false);
                 setWatermark(true);
               }}
             />
@@ -1039,7 +1326,7 @@ export default function Home() {
                   </div>
                   <button
                     className="photo-remove"
-                    onClick={() => clearImage(watermarkUrlRef, setWatermarkUrl)}
+                    onClick={() => setWatermarkUrl(null)}
                     aria-label="Quitar logo"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1115,15 +1402,18 @@ export default function Home() {
             <div
               className="diagonal-sweep"
               style={{
-                clipPath: SWEEP_SHAPES[category],
-                background: `linear-gradient(135deg,${accent}70 0%,${accent}38 100%)`,
+                background: SWEEPS[category](
+                  accent,
+                  hexAlpha(sweepIntensity),
+                  hexAlpha(sweepIntensity * 0.45)
+                ),
               }}
             />
             <div
               className="accent-circle"
-              style={{ background: `radial-gradient(circle,${accent}38 0%,transparent 72%)` }}
+              style={{ background: `radial-gradient(circle,${accent}30 0%,transparent 72%)` }}
             />
-            <div className="accent-line" />
+            {showAccentLine && <div className="accent-line" />}
 
             {category === "partido" && (
               <>
@@ -1138,8 +1428,12 @@ export default function Home() {
                     style={{
                       ...styleFor("jornadaPill"),
                       fontSize: jornadaSize * 2.6 + "cqw",
-                      ...(jornadaStyle === "bloque" ? { background: accent } : null),
-                      ...(jornadaStyle === "barra" ? { borderColor: accent } : null),
+                      ...(jornadaStyle === "bloque"
+                        ? { background: jornadaColor || accent }
+                        : jornadaColor
+                        ? { color: jornadaColor }
+                        : null),
+                      ...(jornadaStyle === "barra" ? { borderColor: jornadaColor || accent } : null),
                     }}
                     onPointerDown={startDrag("jornadaPill")}
                   >
@@ -1149,7 +1443,11 @@ export default function Home() {
                 {showVs && (
                   <div
                     className={"vs-mark v-" + vsStyle}
-                    style={{ ...styleFor("vsMark"), fontSize: vsSize * 2.6 + "cqw" }}
+                    style={{
+                      ...styleFor("vsMark"),
+                      fontSize: vsSize * 2.6 + "cqw",
+                      ...(vsColor ? { color: vsColor } : null),
+                    }}
                     onPointerDown={startDrag("vsMark")}
                   >
                     {vsStyle === "guion" ? "—" : vsStyle === "punto" ? "·" : vsStyle === "versalita" ? "VS" : "vs"}
@@ -1242,8 +1540,12 @@ export default function Home() {
             )}
 
             <div className={"safe-margin" + (dragActive ? " show" : "")} />
-            <div className={"snap-guide" + (guides.v ? " show" : "")} id="guideV" />
-            <div className={"snap-guide" + (guides.h ? " show" : "")} id="guideH" />
+            {guides.x !== null && (
+              <div className="snap-guide guide-v show" style={{ left: guides.x + "%" }} />
+            )}
+            {guides.y !== null && (
+              <div className="snap-guide guide-h show" style={{ top: guides.y + "%" }} />
+            )}
 
             {generating && (
               <div className="stage-loading show">
@@ -1260,6 +1562,30 @@ export default function Home() {
             </svg>
             {exporting ? "Exportando…" : "Exportar PNG"}
           </button>
+
+          {lastDragged && (
+            <div className="align-bar">
+              <span className="crest-label">Alinear</span>
+              <button className="align-btn" onClick={() => alignLast("left", 50)} title="Centrar horizontalmente">
+                Centro H
+              </button>
+              <button className="align-btn" onClick={() => alignLast("top", 50)} title="Centrar verticalmente">
+                Centro V
+              </button>
+              <button className="align-btn" onClick={() => alignLast("left", 12)}>
+                Izq.
+              </button>
+              <button className="align-btn" onClick={() => alignLast("left", 88)}>
+                Der.
+              </button>
+              <button className="align-btn" onClick={() => alignLast("top", 12)}>
+                Arriba
+              </button>
+              <button className="align-btn" onClick={() => alignLast("top", 88)}>
+                Abajo
+              </button>
+            </div>
+          )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div className="stage-caption">{stageCaptionText}</div>
@@ -1374,6 +1700,25 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .color-wash{position:absolute;inset:0;pointer-events:none;}
 .custom-bg{position:absolute;inset:-4%;pointer-events:none;overflow:hidden;}
 .custom-bg img{width:100%;height:100%;object-fit:cover;}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:99;background:var(--surface-2);border:1px solid var(--gold);color:var(--text);padding:10px 18px;border-radius:9px;font-size:13px;font-weight:600;box-shadow:0 10px 30px -8px rgba(0,0,0,.7);}
+.tpl-list{display:flex;flex-direction:column;gap:5px;}
+.tpl-item{display:flex;gap:5px;}
+.tpl-load{flex:1;text-align:left;padding:10px 12px;border-radius:8px;font-size:12.5px;font-weight:600;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);}
+.tpl-load:hover{border-color:var(--gold);color:var(--text);}
+.tpl-del{padding:0 9px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-faint);display:flex;align-items:center;}
+.tpl-del:hover{color:#d2624f;border-color:#d2624f;}
+.tpl-new{padding:10px;border-radius:8px;font-size:12px;font-weight:600;background:transparent;border:1px dashed var(--border-strong);color:var(--text-faint);}
+.tpl-new:hover{border-color:var(--gold);color:var(--gold);}
+.tpl-save-row{display:flex;gap:5px;align-items:center;}
+.tpl-save-row .field-input{flex:1;min-width:0;}
+.align-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center;}
+.align-btn{padding:6px 12px;border-radius:7px;font-size:11.5px;font-weight:600;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);}
+.align-btn:hover{border-color:var(--gold);color:var(--text);}
+.mini-swatches{display:flex;gap:5px;flex:1;}
+.mini-swatch{width:19px;height:19px;border-radius:50%;border:2px solid transparent;padding:0;}
+.mini-swatch:hover{transform:scale(1.12);}
+.mini-swatch.active{border-color:var(--text);}
+.mini-swatch.auto{background:conic-gradient(from 180deg,#f3ede4,#c9a24b,#b23a2f,#3a6a8c,#f3ede4);}
 .pill-row{display:flex;flex-wrap:wrap;gap:5px;}
 .style-pill{padding:6px 11px;border-radius:7px;font-size:11.5px;font-weight:600;background:var(--surface);border:1px solid var(--border);color:var(--text-faint);}
 .style-pill:hover{color:var(--text-dim);border-color:var(--border-strong);}
@@ -1425,8 +1770,8 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .safe-margin.show{opacity:1;}
 .snap-guide{position:absolute;background:var(--gold);opacity:0;pointer-events:none;transition:opacity .08s ease;box-shadow:0 0 6px rgba(201,162,75,.6);}
 .snap-guide.show{opacity:.85;}
-#guideV{left:50%;top:0;bottom:0;width:1px;transform:translateX(-50%);}
-#guideH{top:50%;left:0;right:0;height:1px;transform:translateY(-50%);}
+.guide-v{top:0;bottom:0;width:1px;transform:translateX(-50%);}
+.guide-h{left:0;right:0;height:1px;transform:translateY(-50%);}
 .reset-link{font-size:12px;background:none;border:none;color:var(--text-faint);padding:0;}
 .reset-link:hover{color:var(--gold);}
 .reset-link.danger:hover{color:#d2624f;}
