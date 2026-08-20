@@ -41,6 +41,7 @@ export default function Home() {
   const [crestScale, setCrestScale] = useState(1);
   const [leagueScale, setLeagueScale] = useState(1);
   const [teamCrestScale, setTeamCrestScale] = useState(1);
+  const [autoAccent, setAutoAccent] = useState(null);
 
   const previewRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -133,6 +134,64 @@ export default function Home() {
     });
   }
 
+  function extractAccentColor(file) {
+    return new Promise((resolve) => {
+      if (!file || !file.type.startsWith("image/")) {
+        resolve(null);
+        return;
+      }
+      const img = new window.Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        try {
+          const size = 80;
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, size, size);
+          URL.revokeObjectURL(url);
+          const { data } = ctx.getImageData(0, 0, size, size);
+          let r = 0,
+            g = 0,
+            b = 0,
+            count = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            const rr = data[i];
+            const gg = data[i + 1];
+            const bb = data[i + 2];
+            const aa = data[i + 3];
+            if (aa < 100) continue;
+            const max = Math.max(rr, gg, bb);
+            const min = Math.min(rr, gg, bb);
+            if (max - min < 40 || max < 40 || max > 250) continue;
+            r += rr;
+            g += gg;
+            b += bb;
+            count++;
+          }
+          if (count < 10) {
+            resolve(null);
+            return;
+          }
+          r = Math.round(r / count);
+          g = Math.round(g / count);
+          b = Math.round(b / count);
+          const hex =
+            "#" +
+            [r, g, b]
+              .map((v) => v.toString(16).padStart(2, "0"))
+              .join("");
+          resolve(hex);
+        } catch (err) {
+          resolve(null);
+        }
+      };
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+  }
+
   function pickImage(urlRef, setter, file) {
     if (!file) return;
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -167,7 +226,7 @@ export default function Home() {
     resetForNewPhoto();
   }
 
-  const accent = customColor || ACCENT_MAP[category];
+  const accent = customColor || autoAccent || ACCENT_MAP[category];
 
   function resetForNewPhoto() {
     setGenerated(false);
@@ -193,6 +252,7 @@ export default function Home() {
     setCrestScale(1);
     setLeagueScale(1);
     setTeamCrestScale(1);
+    setAutoAccent(null);
   }
 
   function handleFileChosen(file) {
@@ -518,6 +578,8 @@ export default function Home() {
                   const f = e.target.files?.[0] || null;
                   e.target.value = "";
                   if (!f) return;
+                  const color = await extractAccentColor(f);
+                  if (color) setAutoAccent(color);
                   pickImage(leagueUrlRef, setLeagueUrl, await stripBackground(f));
                 }}
               />
@@ -561,6 +623,8 @@ export default function Home() {
                   const f = e.target.files?.[0] || null;
                   e.target.value = "";
                   if (!f) return;
+                  const color = await extractAccentColor(f);
+                  if (color) setAutoAccent(color);
                   pickImage(teamCrestUrlRef, setTeamCrestUrl, await stripBackground(f));
                 }}
               />
@@ -604,6 +668,8 @@ export default function Home() {
                   const f = e.target.files?.[0] || null;
                   e.target.value = "";
                   if (!f) return;
+                  const color = await extractAccentColor(f);
+                  if (color) setAutoAccent(color);
                   pickImage(teamCrestUrlRef, setTeamCrestUrl, await stripBackground(f));
                 }}
               />
@@ -654,7 +720,11 @@ export default function Home() {
                 />
               ))}
               <span className="swatch-label">
-                {customColor ? `${COLOR_NAMES[customColor]} — fijo para esta portada` : "Automático — según el equipo/categoría"}
+                {customColor
+                  ? `${COLOR_NAMES[customColor]} — fijo para esta portada`
+                  : autoAccent
+                  ? "Extraído del logo que has subido"
+                  : "Automático — según la categoría"}
               </span>
             </div>
           </div>
@@ -779,21 +849,20 @@ export default function Home() {
 
             {category === "partido" && (
               <>
-                <div className="side-block" style={{ background: accent + "22" }} />
                 <div className="jornada-pill" style={styleFor("jornadaPill")} onPointerDown={startDrag("jornadaPill")}>
                   {jornadaText || "Jornada 14"}
                 </div>
                 <div className="vs-mark">vs</div>
                 <div className="vs-line" />
                 <div
-                  className="crest-circle crest-a"
+                  className={(crestAUrl ? "crest-logo" : "crest-mark") + " crest-a"}
                   style={{ ...styleFor("crestA"), width: crestScale * 11 + "%" }}
                   onPointerDown={startDrag("crestA")}
                 >
                   {crestAUrl ? <img src={crestAUrl} alt="" /> : "A"}
                 </div>
                 <div
-                  className="crest-circle crest-b"
+                  className={(crestBUrl ? "crest-logo" : "crest-mark") + " crest-b"}
                   style={{ ...styleFor("crestB"), width: crestScale * 11 + "%" }}
                   onPointerDown={startDrag("crestB")}
                 >
@@ -801,8 +870,8 @@ export default function Home() {
                 </div>
                 {leagueUrl && (
                   <div
-                    className="league-badge"
-                    style={{ ...styleFor("leagueLogo"), width: leagueScale * 8 + "%" }}
+                    className="league-mark"
+                    style={{ ...styleFor("leagueLogo"), width: leagueScale * 6 + "%" }}
                     onPointerDown={startDrag("leagueLogo")}
                   >
                     <img src={leagueUrl} alt="" />
@@ -827,9 +896,11 @@ export default function Home() {
                 {!generated && <div className="empty-note">Sube una fotografía y pulsa<br />Generar para ver la vista previa</div>}
                 <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
                   {teamCrestUrl ? (
-                    <img className="team-dot" src={teamCrestUrl} alt="" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
+                    <div className="team-logo" style={{ width: 22 * teamCrestScale }}>
+                      <img src={teamCrestUrl} alt="" />
+                    </div>
                   ) : (
-                    <div className="team-dot" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
+                    <div className="team-mark" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
                   )}
                   <div className="team-label">Equipo</div>
                 </div>
@@ -848,9 +919,11 @@ export default function Home() {
                 {!generated && <div className="empty-note">Sube una fotografía y pulsa<br />Generar para ver la vista previa</div>}
                 <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
                   {teamCrestUrl ? (
-                    <img className="team-dot" src={teamCrestUrl} alt="" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
+                    <div className="team-logo" style={{ width: 22 * teamCrestScale }}>
+                      <img src={teamCrestUrl} alt="" />
+                    </div>
                   ) : (
-                    <div className="team-dot" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
+                    <div className="team-mark" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
                   )}
                   <div className="team-label">Equipo</div>
                 </div>
@@ -995,18 +1068,20 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .diagonal-sweep{position:absolute;inset:0;pointer-events:none;}
 .accent-circle{position:absolute;right:4%;top:10%;width:42%;aspect-ratio:1;border-radius:50%;}
 .accent-line{position:absolute;left:6%;top:9%;width:14%;height:2px;background:var(--gold);opacity:.6;}
-.side-block{position:absolute;left:5%;top:9%;width:15%;height:38%;border-left:2px solid var(--gold);}
 .jornada-pill{position:absolute;left:50%;top:29%;transform:translateX(-50%);padding:1.6% 4.2%;border:1px solid rgba(243,237,224,.3);border-radius:999px;font-size:2.6cqw;letter-spacing:.14em;color:var(--text-dim);text-transform:uppercase;white-space:nowrap;}
 .vs-mark{position:absolute;left:50%;top:18.5%;transform:translate(-50%,-50%);font-family:var(--font-display);font-style:italic;font-size:2.6cqw;color:var(--text-faint);}
 .vs-line{position:absolute;left:50%;top:40%;bottom:10%;width:1px;background:linear-gradient(180deg,transparent 0%,rgba(243,237,224,.3) 50%,transparent 100%);}
-.crest-circle{width:11%;aspect-ratio:1;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:var(--font-display);font-size:3.4cqw;color:var(--text-dim);position:absolute;top:13%;}
-.crest-circle img{width:100%;height:100%;object-fit:cover;}
+.crest-mark{width:11%;aspect-ratio:1;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:3.4cqw;color:var(--text-dim);position:absolute;top:13%;}
+.crest-logo{position:absolute;top:13%;filter:drop-shadow(0 3px 10px rgba(0,0,0,.55));}
+.crest-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .crest-a{left:50%;transform:translateX(calc(-100% - 5.5%));}
 .crest-b{left:calc(50% + 5.5%);}
-.league-badge{position:absolute;left:50%;top:3%;transform:translateX(-50%);width:8%;aspect-ratio:1;border-radius:8px;background:var(--surface-2);border:1px solid var(--border-strong);overflow:hidden;display:flex;align-items:center;justify-content:center;}
-.league-badge img{width:100%;height:100%;object-fit:contain;padding:2px;}
+.league-mark{position:absolute;left:50%;top:3%;transform:translateX(-50%);width:6%;filter:drop-shadow(0 3px 8px rgba(0,0,0,.5));}
+.league-mark img{width:100%;height:auto;display:block;object-fit:contain;}
 .team-tag{position:absolute;left:8%;bottom:9%;display:flex;align-items:center;gap:7px;opacity:.85;}
-.team-dot{width:20px;height:20px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);object-fit:cover;}
+.team-mark{width:20px;height:20px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);}
+.team-logo{filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));}
+.team-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .team-label{font-family:var(--font-sans);font-size:10px;letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase;}
 .empty-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);font-size:12px;color:var(--text-faint);text-align:center;letter-spacing:.04em;line-height:1.5;}
 .watermark{position:absolute;right:4%;bottom:4%;font-family:var(--font-display);font-size:11px;letter-spacing:.08em;color:rgba(243,237,224,.4);}
@@ -1015,9 +1090,9 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .photo-frame-individual{right:6%;bottom:0;width:46%;height:92%;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-colectivo{left:50%;bottom:0;width:60%;height:80%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-partido{left:50%;bottom:0;width:46%;height:74%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 20%);mask-image:linear-gradient(to bottom,transparent 0%,black 20%);}
-.jornada-pill,.crest-circle,.team-tag,.league-badge{cursor:grab;touch-action:none;}
-.jornada-pill:hover,.crest-circle:hover,.team-tag:hover,.league-badge:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
-.jornada-pill:active,.crest-circle:active,.team-tag:active,.league-badge:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
+.jornada-pill,.crest-mark,.crest-logo,.team-tag,.league-mark{cursor:grab;touch-action:none;}
+.jornada-pill:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
+.jornada-pill:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
 .safe-margin{position:absolute;inset:6%;border:1px dashed rgba(243,237,224,.3);pointer-events:none;opacity:0;transition:opacity .15s ease;border-radius:2px;}
 .safe-margin.show{opacity:1;}
 .snap-guide{position:absolute;background:var(--gold);opacity:0;pointer-events:none;transition:opacity .08s ease;box-shadow:0 0 6px rgba(201,162,75,.6);}
