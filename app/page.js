@@ -16,6 +16,43 @@ const SWEEPS = {
 };
 const SNAP_LINES = [6, 25, 33.333, 50, 66.667, 75, 94];
 const TEXT_COLORS = ["#f3ede4", "#c9a24b", "#b23a2f", "#3a6a8c", "#0b0a09"];
+const SOCIAL_PLATFORMS = {
+  x: "X",
+  instagram: "Instagram",
+  linkedin: "LinkedIn",
+  youtube: "YouTube",
+  ninguno: "Sin icono",
+};
+
+function SocialIcon({ platform }) {
+  const common = { width: "1em", height: "1em", viewBox: "0 0 24 24", fill: "currentColor" };
+  if (platform === "x")
+    return (
+      <svg {...common}>
+        <path d="M17.53 3h3.02l-6.6 7.54L21.75 21h-5.9l-4.62-6.04L5.94 21H2.92l7.05-8.06L2.5 3h6.05l4.18 5.52L17.53 3zm-1.06 16.13h1.67L7.6 4.78H5.81l10.66 14.35z" />
+      </svg>
+    );
+  if (platform === "instagram")
+    return (
+      <svg {...common}>
+        <path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16zm0 1.98c-3.15 0-3.52.01-4.76.07-1.15.05-1.77.24-2.19.4-.55.22-.94.47-1.35.88-.41.41-.66.8-.88 1.35-.16.42-.35 1.04-.4 2.19-.06 1.24-.07 1.61-.07 4.76s.01 3.52.07 4.76c.05 1.15.24 1.77.4 2.19.22.55.47.94.88 1.35.41.41.8.66 1.35.88.42.16 1.04.35 2.19.4 1.24.06 1.61.07 4.76.07s3.52-.01 4.76-.07c1.15-.05 1.77-.24 2.19-.4.55-.22.94-.47 1.35-.88.41-.41.66-.8.88-1.35.16-.42.35-1.04.4-2.19.06-1.24.07-1.61.07-4.76s-.01-3.52-.07-4.76c-.05-1.15-.24-1.77-.4-2.19-.22-.55-.47-.94-.88-1.35-.41-.41-.8-.66-1.35-.88-.42-.16-1.04-.35-2.19-.4-1.24-.06-1.61-.07-4.76-.07zm0 3.37a4.49 4.49 0 110 8.98 4.49 4.49 0 010-8.98zm0 7.4a2.91 2.91 0 100-5.82 2.91 2.91 0 000 5.82zm5.72-7.6a1.05 1.05 0 11-2.1 0 1.05 1.05 0 012.1 0z" />
+      </svg>
+    );
+  if (platform === "linkedin")
+    return (
+      <svg {...common}>
+        <path d="M6.94 5.5a1.94 1.94 0 11-3.88 0 1.94 1.94 0 013.88 0zM3.3 8.9h3.4V21H3.3V8.9zm5.68 0h3.26v1.65h.05c.45-.86 1.56-1.77 3.22-1.77 3.44 0 4.08 2.27 4.08 5.22V21h-3.4v-5.33c0-1.27-.02-2.9-1.77-2.9-1.77 0-2.04 1.38-2.04 2.81V21h-3.4V8.9z" />
+      </svg>
+    );
+  if (platform === "youtube")
+    return (
+      <svg {...common}>
+        <path d="M23.5 6.2a3.02 3.02 0 00-2.12-2.14C19.5 3.55 12 3.55 12 3.55s-7.5 0-9.38.51A3.02 3.02 0 00.5 6.2C0 8.09 0 12 0 12s0 3.91.5 5.8a3.02 3.02 0 002.12 2.14c1.88.51 9.38.51 9.38.51s7.5 0 9.38-.51a3.02 3.02 0 002.12-2.14c.5-1.89.5-5.8.5-5.8s0-3.91-.5-5.8zM9.55 15.57V8.43L15.82 12l-6.27 3.57z" />
+      </svg>
+    );
+  return null;
+}
+
 const LS_WATERMARK = "madg.watermark";
 const LS_SETTINGS = "madg.settings";
 const LS_TEMPLATES = "madg.templates";
@@ -86,6 +123,14 @@ export default function Home() {
   const [watermarkScale, setWatermarkScale] = useState(1);
   const [watermarkOpacity, setWatermarkOpacity] = useState(55);
 
+  const [vsLineLength, setVsLineLength] = useState(50);
+  const [vsLineThickness, setVsLineThickness] = useState(1);
+  const [showSocial, setShowSocial] = useState(false);
+  const [socialText, setSocialText] = useState("@bleteanalisis");
+  const [socialPlatform, setSocialPlatform] = useState("x");
+  const [socialSize, setSocialSize] = useState(1);
+  const [socialColor, setSocialColor] = useState(null);
+
   const [templates, setTemplates] = useState([]);
   const [templateName, setTemplateName] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -135,6 +180,13 @@ export default function Home() {
     vsColor,
     sweepIntensity,
     showAccentLine,
+    vsLineLength,
+    vsLineThickness,
+    showSocial,
+    socialText,
+    socialPlatform,
+    socialSize,
+    socialColor,
     crestScale,
     leagueScale,
     teamCrestScale,
@@ -164,6 +216,13 @@ export default function Home() {
     setVsColor(s.vsColor ?? null);
     if (typeof s.sweepIntensity === "number") setSweepIntensity(s.sweepIntensity);
     if (typeof s.showAccentLine === "boolean") setShowAccentLine(s.showAccentLine);
+    if (typeof s.vsLineLength === "number") setVsLineLength(s.vsLineLength);
+    if (typeof s.vsLineThickness === "number") setVsLineThickness(s.vsLineThickness);
+    if (typeof s.showSocial === "boolean") setShowSocial(s.showSocial);
+    if (typeof s.socialText === "string") setSocialText(s.socialText);
+    if (s.socialPlatform) setSocialPlatform(s.socialPlatform);
+    if (typeof s.socialSize === "number") setSocialSize(s.socialSize);
+    setSocialColor(s.socialColor ?? null);
     if (typeof s.crestScale === "number") setCrestScale(s.crestScale);
     if (typeof s.leagueScale === "number") setLeagueScale(s.leagueScale);
     if (typeof s.teamCrestScale === "number") setTeamCrestScale(s.teamCrestScale);
@@ -457,6 +516,8 @@ export default function Home() {
     setVsColor(null);
     setSweepIntensity(38);
     setShowAccentLine(false);
+    setVsLineLength(50);
+    setVsLineThickness(1);
     setLastDragged(null);
   }
 
@@ -492,18 +553,45 @@ export default function Home() {
     if (!generated || !previewRef.current || exporting) return;
     setExporting(true);
     try {
+      const node = previewRef.current;
       const target = RATIOS[format];
-      const dataUrl = await toPng(previewRef.current, {
+
+      // Espera a que las tipografías y todas las imágenes estén cargadas:
+      // si no, la captura sale con la fuente de reserva o sin fotos.
+      if (document.fonts?.ready) await document.fonts.ready;
+      await Promise.all(
+        Array.from(node.querySelectorAll("img")).map((img) =>
+          img.complete && img.naturalWidth
+            ? Promise.resolve()
+            : new Promise((res) => {
+                img.onload = res;
+                img.onerror = res;
+              })
+        )
+      );
+
+      const opts = {
         canvasWidth: target.w,
         canvasHeight: target.h,
         pixelRatio: 1,
-      });
+        cacheBust: false,
+        backgroundColor: "#0b0a09",
+      };
+
+      // La primera captura de html-to-image suele salir incompleta porque
+      // aún está resolviendo fuentes/imágenes. La segunda ya es fiel.
+      await toPng(node, opts);
+      await new Promise((r) => setTimeout(r, 120));
+      const dataUrl = await toPng(node, opts);
+
       const link = document.createElement("a");
       link.download = `portada-${category}-${format}.png`;
       link.href = dataUrl;
       link.click();
+      showToast("PNG exportado");
     } catch (err) {
       console.error("Error exportando PNG", err);
+      showToast("No se pudo exportar — inténtalo otra vez");
     } finally {
       setExporting(false);
     }
@@ -611,6 +699,8 @@ export default function Home() {
     setVsColor(null);
     setSweepIntensity(38);
     setShowAccentLine(false);
+    setVsLineLength(50);
+    setVsLineThickness(1);
     setLastDragged(null);
     setPhotoScale(1);
     setPhotoOffsetY(0);
@@ -944,7 +1034,7 @@ export default function Home() {
                   <input
                     type="range"
                     min="0.5"
-                    max="2"
+                    max="6"
                     step="0.05"
                     value={leagueScale}
                     onChange={(e) => setLeagueScale(Number(e.target.value))}
@@ -1073,6 +1163,34 @@ export default function Home() {
                   <div className="switch-knob" />
                 </button>
               </div>
+              {showVsLine && (
+                <>
+                  <div className="blur-row">
+                    <span className="crest-label">Largo</span>
+                    <input
+                      type="range"
+                      min="10"
+                      max="95"
+                      value={vsLineLength}
+                      onChange={(e) => setVsLineLength(Number(e.target.value))}
+                      className="blur-slider"
+                    />
+                    <span className="blur-value">{vsLineLength}%</span>
+                  </div>
+                  <div className="blur-row">
+                    <span className="crest-label">Grosor</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="8"
+                      value={vsLineThickness}
+                      onChange={(e) => setVsLineThickness(Number(e.target.value))}
+                      className="blur-slider"
+                    />
+                    <span className="blur-value">{vsLineThickness}px</span>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -1280,7 +1398,72 @@ export default function Home() {
           </div>
 
           <div className="stack">
-            <div className="label">6 · Marca de agua</div>
+            <div className="label">6 · Redes sociales</div>
+            <div className="toggle-row">
+              <div>
+                <div className="toggle-row-title">Mostrar usuario</div>
+                <div className="toggle-row-sub">Tu perfil, en la portada</div>
+              </div>
+              <button className={"switch" + (showSocial ? " on" : "")} onClick={() => setShowSocial((v) => !v)}>
+                <div className="switch-knob" />
+              </button>
+            </div>
+            {showSocial && (
+              <>
+                <input
+                  className="field-static field-input"
+                  value={socialText}
+                  onChange={(e) => setSocialText(e.target.value)}
+                  placeholder="@tuusuario"
+                />
+                <div className="pill-row">
+                  {Object.entries(SOCIAL_PLATFORMS).map(([id, name]) => (
+                    <button
+                      key={id}
+                      className={"style-pill" + (socialPlatform === id ? " active" : "")}
+                      onClick={() => setSocialPlatform(id)}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+                <div className="blur-row">
+                  <span className="crest-label">Tamaño</span>
+                  <input
+                    type="range"
+                    min="0.6"
+                    max="3"
+                    step="0.05"
+                    value={socialSize}
+                    onChange={(e) => setSocialSize(Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{Math.round(socialSize * 100)}%</span>
+                </div>
+                <div className="blur-row">
+                  <span className="crest-label">Color</span>
+                  <div className="mini-swatches">
+                    <button
+                      className={"mini-swatch auto" + (!socialColor ? " active" : "")}
+                      onClick={() => setSocialColor(null)}
+                      title="Automático"
+                    />
+                    {TEXT_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        className={"mini-swatch" + (socialColor === c ? " active" : "")}
+                        style={{ background: c }}
+                        onClick={() => setSocialColor(c)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="stack">
+            <div className="label">7 · Marca de agua</div>
             <div className="toggle-row">
               <div>
                 <div className="toggle-row-title">Mostrar marca de agua</div>
@@ -1453,7 +1636,17 @@ export default function Home() {
                     {vsStyle === "guion" ? "—" : vsStyle === "punto" ? "·" : vsStyle === "versalita" ? "VS" : "vs"}
                   </div>
                 )}
-                {showVsLine && <div className="vs-line" />}
+                {showVsLine && (
+                  <div
+                    className="vs-line"
+                    style={{
+                      ...styleFor("vsLine"),
+                      height: vsLineLength + "%",
+                      width: vsLineThickness + "px",
+                    }}
+                    onPointerDown={startDrag("vsLine")}
+                  />
+                )}
                 <div
                   className={(crestAUrl ? "crest-logo" : "crest-mark") + " crest-a"}
                   style={{ ...styleFor("crestA"), width: crestScale * 11 + "%" }}
@@ -1523,6 +1716,21 @@ export default function Home() {
                   <div className="team-label">Equipo</div>
                 </div>
               </>
+            )}
+
+            {showSocial && generated && socialText.trim() && (
+              <div
+                className="social-tag"
+                style={{
+                  ...styleFor("social"),
+                  fontSize: socialSize * 1.5 + "cqw",
+                  ...(socialColor ? { color: socialColor } : null),
+                }}
+                onPointerDown={startDrag("social")}
+              >
+                <SocialIcon platform={socialPlatform} />
+                <span>{socialText}</span>
+              </div>
             )}
 
             {watermark && generated && watermarkUrl && (
@@ -1742,7 +1950,7 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .v-versalita{font-family:var(--font-sans);font-weight:700;letter-spacing:.18em;}
 .v-guion{font-family:var(--font-sans);font-weight:300;}
 .v-punto{font-family:var(--font-sans);font-weight:700;}
-.vs-line{position:absolute;left:50%;top:40%;bottom:10%;width:1px;background:linear-gradient(180deg,transparent 0%,rgba(243,237,224,.3) 50%,transparent 100%);}
+.vs-line{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:linear-gradient(180deg,transparent 0%,rgba(243,237,224,.45) 50%,transparent 100%);border-radius:2px;}
 .crest-mark{width:11%;aspect-ratio:1;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:3.4cqw;color:var(--text-dim);position:absolute;top:13%;}
 .crest-logo{position:absolute;top:13%;filter:drop-shadow(0 3px 10px rgba(0,0,0,.55));}
 .crest-logo img{width:100%;height:auto;display:block;object-fit:contain;}
@@ -1756,6 +1964,7 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .team-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .team-label{font-family:var(--font-sans);font-size:10px;letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase;}
 .empty-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);font-size:12px;color:var(--text-faint);text-align:center;letter-spacing:.04em;line-height:1.5;}
+.social-tag{position:absolute;left:5%;bottom:6%;display:flex;align-items:center;gap:.5em;color:var(--text);font-family:var(--font-sans);font-weight:600;letter-spacing:.04em;line-height:1;text-shadow:0 2px 8px rgba(0,0,0,.6);white-space:nowrap;}
 .watermark-logo{position:absolute;right:4%;bottom:4%;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));}
 .watermark-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .photo-frame{position:absolute;overflow:hidden;z-index:1;}
@@ -1763,9 +1972,9 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .photo-frame-individual{right:6%;bottom:0;width:46%;height:92%;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-colectivo{left:50%;bottom:0;width:60%;height:80%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-partido{left:50%;bottom:0;width:46%;height:74%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 20%);mask-image:linear-gradient(to bottom,transparent 0%,black 20%);}
-.jornada,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo,.vs-mark{cursor:grab;touch-action:none;z-index:3;}
-.jornada:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover,.vs-mark:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
-.jornada:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active,.vs-mark:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
+.jornada,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo,.vs-mark,.social-tag,.vs-line{cursor:grab;touch-action:none;z-index:3;}
+.jornada:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover,.vs-mark:hover,.social-tag:hover,.vs-line:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
+.jornada:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active,.vs-mark:active,.social-tag:active,.vs-line:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
 .safe-margin{position:absolute;inset:6%;border:1px dashed rgba(243,237,224,.3);pointer-events:none;opacity:0;transition:opacity .15s ease;border-radius:2px;}
 .safe-margin.show{opacity:1;}
 .snap-guide{position:absolute;background:var(--gold);opacity:0;pointer-events:none;transition:opacity .08s ease;box-shadow:0 0 6px rgba(201,162,75,.6);}
