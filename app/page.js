@@ -54,6 +54,7 @@ function SocialIcon({ platform }) {
 }
 
 const LS_WATERMARK = "madg.watermark";
+const LS_LOGOS = "madg.logos";
 const LS_SETTINGS = "madg.settings";
 const LS_TEMPLATES = "madg.templates";
 const hexAlpha = (pct) =>
@@ -155,6 +156,16 @@ export default function Home() {
       if (wm) setWatermarkUrl(wm);
       const saved = localStorage.getItem(LS_SETTINGS);
       if (saved) applySettings(JSON.parse(saved));
+      // Los escudos y el logo de liga se reutilizan cada semana, así que
+      // vuelven contigo. Las fotos no: cambian en cada portada.
+      const logos = localStorage.getItem(LS_LOGOS);
+      if (logos) {
+        const l = JSON.parse(logos);
+        if (l.crestAUrl) setCrestAUrl(l.crestAUrl);
+        if (l.crestBUrl) setCrestBUrl(l.crestBUrl);
+        if (l.leagueUrl) setLeagueUrl(l.leagueUrl);
+        if (l.teamCrestUrl) setTeamCrestUrl(l.teamCrestUrl);
+      }
       const tpl = localStorage.getItem(LS_TEMPLATES);
       if (tpl) setTemplates(JSON.parse(tpl));
     } catch (err) {
@@ -249,6 +260,18 @@ export default function Home() {
       if (stack.length > 60) stack.shift();
     }
   }, [settingsJson]);
+
+  // Guarda escudos y logo de liga para no volver a subirlos cada semana.
+  useEffect(() => {
+    try {
+      const l = { crestAUrl, crestBUrl, leagueUrl, teamCrestUrl };
+      if (crestAUrl || crestBUrl || leagueUrl || teamCrestUrl) {
+        localStorage.setItem(LS_LOGOS, JSON.stringify(l));
+      } else {
+        localStorage.removeItem(LS_LOGOS);
+      }
+    } catch {}
+  }, [crestAUrl, crestBUrl, leagueUrl, teamCrestUrl]);
 
   // Guarda el logo del proyecto aparte, para que siga ahí al volver.
   useEffect(() => {
@@ -556,19 +579,25 @@ export default function Home() {
       const node = previewRef.current;
       const target = RATIOS[format];
 
-      // Espera a que las tipografías y todas las imágenes estén cargadas:
-      // si no, la captura sale con la fuente de reserva o sin fotos.
       if (document.fonts?.ready) await document.fonts.ready;
+
+      // Espera a que las imágenes terminen, pero NUNCA se queda colgado:
+      // una imagen que ya falló tiene complete=true y naturalWidth=0, y no
+      // vuelve a emitir load ni error, así que hay que acotar la espera.
+      const imgs = Array.from(node.querySelectorAll("img"));
       await Promise.all(
-        Array.from(node.querySelectorAll("img")).map((img) =>
-          img.complete && img.naturalWidth
-            ? Promise.resolve()
-            : new Promise((res) => {
-                img.onload = res;
-                img.onerror = res;
-              })
+        imgs.map(
+          (img) =>
+            new Promise((res) => {
+              if (img.complete) return res();
+              const done = () => res();
+              img.addEventListener("load", done, { once: true });
+              img.addEventListener("error", done, { once: true });
+              setTimeout(done, 4000);
+            })
         )
       );
+      const rotas = imgs.filter((i) => !i.naturalWidth).length;
 
       const opts = {
         canvasWidth: target.w,
@@ -576,19 +605,29 @@ export default function Home() {
         pixelRatio: 1,
         cacheBust: false,
         backgroundColor: "#0b0a09",
+        // Inlinear las fuentes de Google falla por CORS y no aporta nada:
+        // el navegador ya las tiene cargadas y las pinta igual. Sin esto,
+        // la exportación tarda 6 veces más y llena la consola de errores.
+        skipFonts: true,
       };
 
-      // La primera captura de html-to-image suele salir incompleta porque
-      // aún está resolviendo fuentes/imágenes. La segunda ya es fiel.
+      // La primera captura de html-to-image suele salir incompleta.
       await toPng(node, opts);
-      await new Promise((r) => setTimeout(r, 120));
+      await new Promise((r) => setTimeout(r, 80));
       const dataUrl = await toPng(node, opts);
+
+      if (!dataUrl || dataUrl.length < 5000) {
+        showToast("La exportación salió vacía — inténtalo otra vez");
+        return;
+      }
 
       const link = document.createElement("a");
       link.download = `portada-${category}-${format}.png`;
       link.href = dataUrl;
       link.click();
-      showToast("PNG exportado");
+      showToast(
+        rotas ? `PNG exportado, pero ${rotas} imagen(es) no cargaron` : "PNG exportado"
+      );
     } catch (err) {
       console.error("Error exportando PNG", err);
       showToast("No se pudo exportar — inténtalo otra vez");
@@ -672,6 +711,9 @@ export default function Home() {
   }
 
   function resetAll() {
+    try {
+      localStorage.removeItem(LS_LOGOS);
+    } catch {}
     setCrestAUrl(null);
     setCrestBUrl(null);
     setLeagueUrl(null);
