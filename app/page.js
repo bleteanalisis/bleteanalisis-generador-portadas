@@ -10,6 +10,19 @@ const SWEEP_SHAPES = {
   individual: "polygon(0% 0%,36% 0%,12% 100%,0% 100%)",
   colectivo: "polygon(0% 100%,100% 48%,100% 100%)",
 };
+const JORNADA_STYLES = {
+  limpio: "Limpio",
+  serif: "Serif",
+  bloque: "Bloque",
+  barra: "Barra",
+  capsula: "Cápsula",
+};
+const VS_STYLES = {
+  serif: "Serif",
+  versalita: "VS",
+  guion: "Guion",
+  punto: "Punto",
+};
 const RATIOS = {
   newsletter: { label: "Newsletter", dims: "1200 × 630", ratio: "1200/630", w: 1200, h: 630 },
   estandar: { label: "Estándar", dims: "1280 × 720", ratio: "1280/720", w: 1280, h: 720 },
@@ -44,7 +57,11 @@ export default function Home() {
   const [autoAccent, setAutoAccent] = useState(null);
   const [showJornada, setShowJornada] = useState(true);
   const [showVs, setShowVs] = useState(true);
-  const [showVsLine, setShowVsLine] = useState(true);
+  const [showVsLine, setShowVsLine] = useState(false);
+  const [jornadaStyle, setJornadaStyle] = useState("limpio");
+  const [jornadaSize, setJornadaSize] = useState(1);
+  const [vsStyle, setVsStyle] = useState("serif");
+  const [vsSize, setVsSize] = useState(1);
   const [photoScale, setPhotoScale] = useState(1);
   const [photoOffsetY, setPhotoOffsetY] = useState(0);
   const [watermarkUrl, setWatermarkUrl] = useState(null);
@@ -268,7 +285,11 @@ export default function Home() {
     setPhotoOffsetY(0);
     setShowJornada(true);
     setShowVs(true);
-    setShowVsLine(true);
+    setShowVsLine(false);
+    setJornadaStyle("limpio");
+    setJornadaSize(1);
+    setVsStyle("serif");
+    setVsSize(1);
   }
 
   function handleFileChosen(file) {
@@ -403,7 +424,11 @@ export default function Home() {
     setJornadaText("Jornada 14");
     setShowJornada(true);
     setShowVs(true);
-    setShowVsLine(true);
+    setShowVsLine(false);
+    setJornadaStyle("limpio");
+    setJornadaSize(1);
+    setVsStyle("serif");
+    setVsSize(1);
     setPhotoScale(1);
     setPhotoOffsetY(0);
     setCrestScale(1);
@@ -713,12 +738,70 @@ export default function Home() {
                   <div className="switch-knob" />
                 </button>
               </div>
+              {showJornada && (
+                <>
+                  <div className="pill-row">
+                    {Object.entries(JORNADA_STYLES).map(([id, name]) => (
+                      <button
+                        key={id}
+                        className={"style-pill" + (jornadaStyle === id ? " active" : "")}
+                        onClick={() => setJornadaStyle(id)}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="blur-row">
+                    <span className="crest-label">Tamaño</span>
+                    <input
+                      type="range"
+                      min="0.6"
+                      max="2.5"
+                      step="0.05"
+                      value={jornadaSize}
+                      onChange={(e) => setJornadaSize(Number(e.target.value))}
+                      className="blur-slider"
+                    />
+                    <span className="blur-value">{Math.round(jornadaSize * 100)}%</span>
+                  </div>
+                </>
+              )}
+
               <div className="toggle-row">
                 <div className="toggle-row-title">Mostrar «vs»</div>
                 <button className={"switch" + (showVs ? " on" : "")} onClick={() => setShowVs((v) => !v)}>
                   <div className="switch-knob" />
                 </button>
               </div>
+              {showVs && (
+                <>
+                  <div className="pill-row">
+                    {Object.entries(VS_STYLES).map(([id, name]) => (
+                      <button
+                        key={id}
+                        className={"style-pill" + (vsStyle === id ? " active" : "")}
+                        onClick={() => setVsStyle(id)}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="blur-row">
+                    <span className="crest-label">Tamaño</span>
+                    <input
+                      type="range"
+                      min="0.6"
+                      max="3"
+                      step="0.05"
+                      value={vsSize}
+                      onChange={(e) => setVsSize(Number(e.target.value))}
+                      className="blur-slider"
+                    />
+                    <span className="blur-value">{Math.round(vsSize * 100)}%</span>
+                  </div>
+                </>
+              )}
+
               <div className="toggle-row">
                 <div className="toggle-row-title">Mostrar línea divisoria</div>
                 <button className={"switch" + (showVsLine ? " on" : "")} onClick={() => setShowVsLine((v) => !v)}>
@@ -1050,13 +1133,26 @@ export default function Home() {
                   </div>
                 )}
                 {showJornada && (
-                  <div className="jornada-pill" style={styleFor("jornadaPill")} onPointerDown={startDrag("jornadaPill")}>
+                  <div
+                    className={"jornada j-" + jornadaStyle}
+                    style={{
+                      ...styleFor("jornadaPill"),
+                      fontSize: jornadaSize * 2.6 + "cqw",
+                      ...(jornadaStyle === "bloque" ? { background: accent } : null),
+                      ...(jornadaStyle === "barra" ? { borderColor: accent } : null),
+                    }}
+                    onPointerDown={startDrag("jornadaPill")}
+                  >
                     {jornadaText || "Jornada 14"}
                   </div>
                 )}
                 {showVs && (
-                  <div className="vs-mark" style={styleFor("vsMark")} onPointerDown={startDrag("vsMark")}>
-                    vs
+                  <div
+                    className={"vs-mark v-" + vsStyle}
+                    style={{ ...styleFor("vsMark"), fontSize: vsSize * 2.6 + "cqw" }}
+                    onPointerDown={startDrag("vsMark")}
+                  >
+                    {vsStyle === "guion" ? "—" : vsStyle === "punto" ? "·" : vsStyle === "versalita" ? "VS" : "vs"}
                   </div>
                 )}
                 {showVsLine && <div className="vs-line" />}
@@ -1278,6 +1374,10 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .color-wash{position:absolute;inset:0;pointer-events:none;}
 .custom-bg{position:absolute;inset:-4%;pointer-events:none;overflow:hidden;}
 .custom-bg img{width:100%;height:100%;object-fit:cover;}
+.pill-row{display:flex;flex-wrap:wrap;gap:5px;}
+.style-pill{padding:6px 11px;border-radius:7px;font-size:11.5px;font-weight:600;background:var(--surface);border:1px solid var(--border);color:var(--text-faint);}
+.style-pill:hover{color:var(--text-dim);border-color:var(--border-strong);}
+.style-pill.active{background:var(--gold-soft);border-color:var(--gold);color:var(--text);}
 .blur-row{display:flex;align-items:center;gap:10px;padding:2px 2px;}
 .blur-slider{flex:1;accent-color:var(--gold);}
 .blur-value{font-size:11px;color:var(--text-faint);font-variant-numeric:tabular-nums;min-width:32px;text-align:right;}
@@ -1286,8 +1386,17 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .diagonal-sweep{position:absolute;inset:0;pointer-events:none;}
 .accent-circle{position:absolute;right:4%;top:10%;width:42%;aspect-ratio:1;border-radius:50%;}
 .accent-line{position:absolute;left:6%;top:9%;width:14%;height:2px;background:var(--gold);opacity:.6;}
-.jornada-pill{position:absolute;left:50%;top:29%;transform:translateX(-50%);padding:1.6% 4.2%;border:1px solid rgba(243,237,224,.3);border-radius:999px;font-size:2.6cqw;letter-spacing:.14em;color:var(--text-dim);text-transform:uppercase;white-space:nowrap;}
-.vs-mark{position:absolute;left:50%;top:18.5%;transform:translate(-50%,-50%);font-family:var(--font-display);font-style:italic;font-size:2.6cqw;color:var(--text-faint);}
+.jornada{position:absolute;left:50%;top:29%;transform:translateX(-50%);white-space:nowrap;line-height:1.2;}
+.j-limpio{font-family:var(--font-sans);font-weight:600;letter-spacing:.28em;text-transform:uppercase;color:var(--text);text-shadow:0 2px 10px rgba(0,0,0,.6);}
+.j-serif{font-family:var(--font-display);font-weight:500;font-style:italic;letter-spacing:.02em;color:var(--text);text-shadow:0 2px 10px rgba(0,0,0,.6);}
+.j-bloque{font-family:var(--font-sans);font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#0b0a09;padding:.5em 1em;}
+.j-barra{font-family:var(--font-sans);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--text);padding:.45em 0;border-top:2px solid var(--gold);border-bottom:2px solid var(--gold);}
+.j-capsula{font-family:var(--font-sans);font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);padding:.55em 1.4em;border:1px solid rgba(243,237,224,.3);border-radius:999px;}
+.vs-mark{position:absolute;left:50%;top:18.5%;transform:translate(-50%,-50%);color:var(--text-faint);line-height:1;}
+.v-serif{font-family:var(--font-display);font-style:italic;}
+.v-versalita{font-family:var(--font-sans);font-weight:700;letter-spacing:.18em;}
+.v-guion{font-family:var(--font-sans);font-weight:300;}
+.v-punto{font-family:var(--font-sans);font-weight:700;}
 .vs-line{position:absolute;left:50%;top:40%;bottom:10%;width:1px;background:linear-gradient(180deg,transparent 0%,rgba(243,237,224,.3) 50%,transparent 100%);}
 .crest-mark{width:11%;aspect-ratio:1;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:3.4cqw;color:var(--text-dim);position:absolute;top:13%;}
 .crest-logo{position:absolute;top:13%;filter:drop-shadow(0 3px 10px rgba(0,0,0,.55));}
@@ -1309,9 +1418,9 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .photo-frame-individual{right:6%;bottom:0;width:46%;height:92%;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-colectivo{left:50%;bottom:0;width:60%;height:80%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
 .photo-frame-partido{left:50%;bottom:0;width:46%;height:74%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 20%);mask-image:linear-gradient(to bottom,transparent 0%,black 20%);}
-.jornada-pill,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo,.vs-mark{cursor:grab;touch-action:none;z-index:3;}
-.jornada-pill:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover,.vs-mark:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
-.jornada-pill:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active,.vs-mark:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
+.jornada,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo,.vs-mark{cursor:grab;touch-action:none;z-index:3;}
+.jornada:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover,.vs-mark:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
+.jornada:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active,.vs-mark:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
 .safe-margin{position:absolute;inset:6%;border:1px dashed rgba(243,237,224,.3);pointer-events:none;opacity:0;transition:opacity .15s ease;border-radius:2px;}
 .safe-margin.show{opacity:1;}
 .snap-guide{position:absolute;background:var(--gold);opacity:0;pointer-events:none;transition:opacity .08s ease;box-shadow:0 0 6px rgba(201,162,75,.6);}
