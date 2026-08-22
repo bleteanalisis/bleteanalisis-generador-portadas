@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="800" height="800">
+  <defs>
+    <linearGradient id="oro" x1="30" y1="58" x2="170" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e8c579"/>
+      <stop offset="100%" stop-color="#b9902f"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(0,40)">
+    <!-- Monograma M -->
+    <path d="M40 78V22h15.5l23.5 36.4L102.5 22H118v56h-13.5V44.5L83.5 76.8h-9L53.5 44.5V78z"
+          fill="url(#oro)"/>
+
+    <!-- La línea cruza más allá del monograma -->
+    <path d="M40 94h94" stroke="#c9a24b" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="152" cy="94" r="5" fill="#e8c579"/>
+  </g>
+</svg>

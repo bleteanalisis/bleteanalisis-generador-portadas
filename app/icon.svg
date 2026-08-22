@@ -1,11 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+    <linearGradient id="fondo" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#1c1812"/>
       <stop offset="100%" stop-color="#0b0a09"/>
     </linearGradient>
+    <linearGradient id="oro" x1="14" y1="16" x2="50" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e0b862"/>
+      <stop offset="100%" stop-color="#b9902f"/>
+    </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
-  <rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="#c9a24b" stroke-opacity="0.35" stroke-width="1"/>
-  <text x="32" y="43" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="30" font-weight="600" fill="#c9a24b">M</text>
+
+  <rect width="64" height="64" rx="14" fill="url(#fondo)"/>
+  <rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="#c9a24b" stroke-opacity="0.28"/>
+
+  <!-- Monograma M -->
+  <path d="M13 43V16h7.6l11.4 17.6L43.4 16H51v27h-6.6V26.9L34.2 42.4h-4.4L19.6 26.9V43z"
+        fill="url(#oro)"/>
+
+  <!-- La línea cruza más allá del monograma -->
+  <path d="M13 50h30" stroke="#c9a24b" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="50.5" cy="50" r="2.4" fill="#e0b862"/>
 </svg>

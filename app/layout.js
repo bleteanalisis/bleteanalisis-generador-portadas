@@ -1,6 +1,17 @@
 export const metadata = {
   title: "Generador de Portadas — Más Allá del Gol",
   description: "Portadas editoriales para análisis de partidos, jugadores y equipos.",
+  // Nombre corto bajo el icono al añadirlo a la pantalla de inicio:
+  // el título completo se cortaba en "Generador de Portada...".
+  appleWebApp: {
+    title: "Portadas",
+    capable: true,
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport = {
+  themeColor: "#0b0a09",
 };
 
 export default function RootLayout({ children }) {
