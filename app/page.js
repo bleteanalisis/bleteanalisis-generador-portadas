@@ -55,6 +55,7 @@ function SocialIcon({ platform }) {
 
 const LS_WATERMARK = "madg.watermark";
 const LS_LOGOS = "madg.logos";
+const LS_GALLERY = "madg.gallery";
 const LS_SETTINGS = "madg.settings";
 const LS_TEMPLATES = "madg.templates";
 const hexAlpha = (pct) =>
@@ -115,9 +116,16 @@ export default function Home() {
   const [vsStyle, setVsStyle] = useState("serif");
   const [vsSize, setVsSize] = useState(1);
   const [vsColor, setVsColor] = useState(null);
-  const [sweepIntensity, setSweepIntensity] = useState(38);
+  const [sweepIntensity, setSweepIntensity] = useState(20);
   const [showAccentLine, setShowAccentLine] = useState(false);
   const [lastDragged, setLastDragged] = useState(null);
+  const [resizing, setResizing] = useState(false);
+  // Secciones plegables: el panel había crecido a 78 controles y 3 pantallas
+  // de scroll. Solo se despliega aquello en lo que estás trabajando.
+  const [openSections, setOpenSections] = useState({ foto: true, equipos: true });
+  const toggleSection = (k) => setOpenSections((o) => ({ ...o, [k]: !o[k] }));
+  const sectionClass = (k) => "stack section" + (openSections[k] ? " open" : "");
+  const [extraLogos, setExtraLogos] = useState([]);
   const [photoScale, setPhotoScale] = useState(1);
   const [photoOffsetY, setPhotoOffsetY] = useState(0);
   const [watermarkUrl, setWatermarkUrl] = useState(null);
@@ -132,6 +140,7 @@ export default function Home() {
   const [socialSize, setSocialSize] = useState(1);
   const [socialColor, setSocialColor] = useState(null);
 
+  const [gallery, setGallery] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [templateName, setTemplateName] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -145,6 +154,7 @@ export default function Home() {
   const teamCrestInputRef = useRef(null);
   const bgInputRef = useRef(null);
   const watermarkInputRef = useRef(null);
+  const extraInputRef = useRef(null);
   const colectivoInputRef = useRef(null);
 
   const historyRef = useRef([]);
@@ -168,6 +178,8 @@ export default function Home() {
       }
       const tpl = localStorage.getItem(LS_TEMPLATES);
       if (tpl) setTemplates(JSON.parse(tpl));
+      const gal = localStorage.getItem(LS_GALLERY);
+      if (gal) setGallery(JSON.parse(gal));
     } catch (err) {
       console.warn("No se pudieron recuperar los ajustes guardados", err);
     }
@@ -481,6 +493,23 @@ export default function Home() {
     }
   }
 
+  // Permite soltar un archivo encima de cualquier zona de subida.
+  function dropZone(onFile) {
+    return {
+      onDragOver: (e) => {
+        e.preventDefault();
+        e.currentTarget.classList.add("dragging-over");
+      },
+      onDragLeave: (e) => e.currentTarget.classList.remove("dragging-over"),
+      onDrop: (e) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove("dragging-over");
+        const f = e.dataTransfer?.files?.[0];
+        if (f && f.type.startsWith("image/")) onFile(f);
+      },
+    };
+  }
+
   async function pickLogo(setter, file, useAsAccent) {
     if (!file) return;
     const src = await processLogo(file);
@@ -522,6 +551,7 @@ export default function Home() {
     setLeagueUrl(null);
     setTeamCrestUrl(null);
     setColectivoPhotos([]);
+    setExtraLogos([]);
     setCrestScale(1);
     setLeagueScale(1);
     setTeamCrestScale(1);
@@ -537,7 +567,7 @@ export default function Home() {
     setVsStyle("serif");
     setVsSize(1);
     setVsColor(null);
-    setSweepIntensity(38);
+    setSweepIntensity(20);
     setShowAccentLine(false);
     setVsLineLength(50);
     setVsLineThickness(1);
@@ -570,6 +600,33 @@ export default function Home() {
       setGenerating(false);
       setGenerated(true);
     }, 1200);
+  }
+
+  // Guarda una miniatura ligera de cada portada exportada, para poder
+  // mirar atrás y mantener coherencia visual entre semanas.
+  async function saveToGallery(dataUrl) {
+    try {
+      const img = await loadImageEl(dataUrl);
+      const w = 280;
+      const h = Math.round((img.height / img.width) * w);
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      const thumb = c.toDataURL("image/jpeg", 0.7);
+      const entry = {
+        id: Date.now(),
+        thumb,
+        category,
+        format,
+        fecha: new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "short" }),
+      };
+      const next = [entry, ...gallery].slice(0, 8);
+      setGallery(next);
+      localStorage.setItem(LS_GALLERY, JSON.stringify(next));
+    } catch (err) {
+      console.warn("No se pudo guardar en la galería", err);
+    }
   }
 
   async function handleExport() {
@@ -625,6 +682,7 @@ export default function Home() {
       link.download = `portada-${category}-${format}.png`;
       link.href = dataUrl;
       link.click();
+      saveToGallery(dataUrl);
       showToast(
         rotas ? `PNG exportado, pero ${rotas} imagen(es) no cargaron` : "PNG exportado"
       );
@@ -654,7 +712,9 @@ export default function Home() {
       setPositions((p) => ({ ...p, [key]: { left: startLeft, top: startTop } }));
       setDragActive(true);
       setLastDragged(key);
-      target.setPointerCapture(e.pointerId);
+      try {
+        target.setPointerCapture(e.pointerId);
+      } catch {}
 
       function onMove(ev) {
         const cRect = previewEl.getBoundingClientRect();
@@ -686,7 +746,9 @@ export default function Home() {
         setGuides({ x: guideX, y: guideY });
       }
       function onUp(ev) {
-        target.releasePointerCapture(ev.pointerId);
+        try {
+          target.releasePointerCapture(ev.pointerId);
+        } catch {}
         setDragActive(false);
         setGuides({ x: null, y: null });
         target.removeEventListener("pointermove", onMove);
@@ -695,6 +757,84 @@ export default function Home() {
       target.addEventListener("pointermove", onMove);
       target.addEventListener("pointerup", onUp);
     };
+  }
+
+  async function addExtraLogo(file) {
+    if (!file || extraLogos.length >= 6) return;
+    const url = await processLogo(file);
+    setExtraLogos((l) => [...l, { id: "extra-" + Date.now(), url, scale: 1 }]);
+  }
+
+  function removeExtraLogo(id) {
+    setExtraLogos((l) => l.filter((x) => x.id !== id));
+    setLastDragged((k) => (k === id ? null : k));
+  }
+
+  function setExtraScale(id, v) {
+    setExtraLogos((l) => l.map((x) => (x.id === id ? { ...x, scale: v } : x)));
+  }
+
+  // Qué ajuste de tamaño controla cada elemento de la portada.
+  const SCALES = {
+    crestA: [crestScale, setCrestScale, 0.4, 3],
+    crestB: [crestScale, setCrestScale, 0.4, 3],
+    leagueLogo: [leagueScale, setLeagueScale, 0.4, 6],
+    teamTag: [teamCrestScale, setTeamCrestScale, 0.4, 3],
+    jornadaPill: [jornadaSize, setJornadaSize, 0.5, 3],
+    vsMark: [vsSize, setVsSize, 0.5, 3],
+    social: [socialSize, setSocialSize, 0.5, 3],
+    watermark: [watermarkScale, setWatermarkScale, 0.4, 3],
+  };
+
+  function scaleOf(key) {
+    if (SCALES[key]) return SCALES[key];
+    const ex = extraLogos.find((x) => x.id === key);
+    if (ex) return [ex.scale, (v) => setExtraScale(key, v), 0.3, 4];
+    return null;
+  }
+
+  // Tirador de esquina: redimensiona sin tener que buscar el slider.
+  function resizeHandle(key) {
+    const sc = scaleOf(key);
+    if (lastDragged !== key || !sc) return null;
+    return (
+      <span
+        className="resize-handle"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const box = e.currentTarget.parentElement;
+          const r = box.getBoundingClientRect();
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          const d0 = Math.hypot(e.clientX - cx, e.clientY - cy) || 1;
+          const [start, , min, max] = sc;
+          const target = e.currentTarget;
+          // Si el navegador no puede capturar el puntero no debe abortar el
+          // redimensionado: los listeners tienen que instalarse igualmente.
+          try {
+            target.setPointerCapture(e.pointerId);
+          } catch {}
+          setResizing(true);
+
+          function onMove(ev) {
+            const d = Math.hypot(ev.clientX - cx, ev.clientY - cy);
+            const next = Math.max(min, Math.min(max, start * (d / d0)));
+            sc[1](Number(next.toFixed(3)));
+          }
+          function onUp(ev) {
+            try {
+              target.releasePointerCapture(ev.pointerId);
+            } catch {}
+            setResizing(false);
+            target.removeEventListener("pointermove", onMove);
+            target.removeEventListener("pointerup", onUp);
+          }
+          target.addEventListener("pointermove", onMove);
+          target.addEventListener("pointerup", onUp);
+        }}
+      />
+    );
   }
 
   function resetPositions() {
@@ -724,6 +864,7 @@ export default function Home() {
     setPhotoUrl(null);
     setPhotoName("");
     setColectivoPhotos([]);
+    setExtraLogos([]);
     setGenerated(false);
     setGenerating(false);
     setPositions({});
@@ -739,7 +880,7 @@ export default function Home() {
     setVsStyle("serif");
     setVsSize(1);
     setVsColor(null);
-    setSweepIntensity(38);
+    setSweepIntensity(20);
     setShowAccentLine(false);
     setVsLineLength(50);
     setVsLineThickness(1);
@@ -785,8 +926,12 @@ export default function Home() {
       width: widths[index] + "%",
       height: heightList[index] + "%",
       bottom: 0,
-      WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 16%)",
-      maskImage: "linear-gradient(to bottom, transparent 0%, black 16%)",
+      WebkitMaskImage:
+        "linear-gradient(to bottom, transparent 0%, #000 14%, #000 86%, transparent 100%), linear-gradient(to right, transparent 0%, #000 10%, #000 90%, transparent 100%)",
+      WebkitMaskComposite: "source-in",
+      maskImage:
+        "linear-gradient(to bottom, transparent 0%, #000 14%, #000 86%, transparent 100%), linear-gradient(to right, transparent 0%, #000 10%, #000 90%, transparent 100%)",
+      maskComposite: "intersect",
     };
   }
 
@@ -824,8 +969,8 @@ export default function Home() {
 
       <div className="body">
         <div className="panel">
-          <div className="stack">
-            <div className="label">Plantillas</div>
+          <div className={sectionClass("plantillas")}>
+            <button type="button" className="label section-head" onClick={() => toggleSection("plantillas")}><span>Plantillas</span><span className="chev" /></button>
             {templates.length > 0 && (
               <div className="tpl-list">
                 {templates.map((t) => (
@@ -886,8 +1031,8 @@ export default function Home() {
           </div>
 
           {category === "colectivo" ? (
-            <div className="stack">
-              <div className="label">1 · Fotografías ({colectivoPhotos.length}/3)</div>
+            <div className={sectionClass("fotoCol")}>
+              <button type="button" className="label section-head" onClick={() => toggleSection("fotoCol")}><span>1 · Fotografías ({colectivoPhotos.length}/3)</span><span className="chev" /></button>
               <input
                 ref={colectivoInputRef}
                 type="file"
@@ -915,7 +1060,7 @@ export default function Home() {
                 </div>
               ))}
               {colectivoPhotos.length < 3 && (
-                <button className="dropzone" onClick={() => colectivoInputRef.current?.click()}>
+                <button className="dropzone" {...dropZone(addColectivoPhoto)} onClick={() => colectivoInputRef.current?.click()}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9a24b" strokeWidth="1.6">
                     <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
                     <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
@@ -926,8 +1071,8 @@ export default function Home() {
               )}
             </div>
           ) : (
-            <div className="stack">
-              <div className="label">1 · Fotografía</div>
+            <div className={sectionClass("foto")}>
+              <button type="button" className="label section-head" onClick={() => toggleSection("foto")}><span>1 · Fotografía</span><span className="chev" /></button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -936,7 +1081,7 @@ export default function Home() {
                 onChange={(e) => handleFileChosen(e.target.files?.[0] || null)}
               />
               {!photoUrl ? (
-                <button className="dropzone" onClick={() => fileInputRef.current?.click()}>
+                <button className="dropzone" {...dropZone(handleFileChosen)} onClick={() => fileInputRef.current?.click()}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9a24b" strokeWidth="1.6">
                     <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
                     <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
@@ -995,8 +1140,8 @@ export default function Home() {
           )}
 
           {category === "partido" && (
-            <div className="stack">
-              <div className="label">2 · Equipos y contexto</div>
+            <div className={sectionClass("equipos")}>
+              <button type="button" className="label section-head" onClick={() => toggleSection("equipos")}><span>2 · Equipos y contexto</span><span className="chev" /></button>
               <div className="crest-row">
                 <input
                   ref={crestAInputRef}
@@ -1010,7 +1155,7 @@ export default function Home() {
                     await pickLogo(setCrestAUrl, f, false);
                   }}
                 />
-                <button type="button" className="crest-slot" onClick={() => crestAInputRef.current?.click()}>
+                <button type="button" className="crest-slot" {...dropZone((f) => pickLogo(setCrestAUrl, f, false))} onClick={() => crestAInputRef.current?.click()}>
                   {crestAUrl ? (
                     <img src={crestAUrl} alt="" className="crest-thumb" />
                   ) : (
@@ -1030,7 +1175,7 @@ export default function Home() {
                     await pickLogo(setCrestBUrl, f, false);
                   }}
                 />
-                <button type="button" className="crest-slot" onClick={() => crestBInputRef.current?.click()}>
+                <button type="button" className="crest-slot" {...dropZone((f) => pickLogo(setCrestBUrl, f, false))} onClick={() => crestBInputRef.current?.click()}>
                   {crestBUrl ? (
                     <img src={crestBUrl} alt="" className="crest-thumb" />
                   ) : (
@@ -1066,7 +1211,7 @@ export default function Home() {
                   await pickLogo(setLeagueUrl, f, true);
                 }}
               />
-              <button type="button" className="league-row" onClick={() => leagueInputRef.current?.click()}>
+              <button type="button" className="league-row" {...dropZone((f) => pickLogo(setLeagueUrl, f, true))} onClick={() => leagueInputRef.current?.click()}>
                 {leagueUrl ? <img src={leagueUrl} alt="" className="league-thumb" /> : <div className="league-icon" />}
                 <div className="crest-label">Logo de la liga</div>
               </button>
@@ -1237,8 +1382,8 @@ export default function Home() {
           )}
 
           {category === "individual" && (
-            <div className="stack">
-              <div className="label">2 · Equipo del jugador</div>
+            <div className={sectionClass("equipoInd")}>
+              <button type="button" className="label section-head" onClick={() => toggleSection("equipoInd")}><span>2 · Equipo del jugador</span><span className="chev" /></button>
               <input
                 ref={teamCrestInputRef}
                 type="file"
@@ -1280,8 +1425,8 @@ export default function Home() {
           )}
 
           {category === "colectivo" && (
-            <div className="stack">
-              <div className="label">2 · Equipo</div>
+            <div className={sectionClass("equipoCol")}>
+              <button type="button" className="label section-head" onClick={() => toggleSection("equipoCol")}><span>2 · Equipo</span><span className="chev" /></button>
               <input
                 ref={teamCrestInputRef}
                 type="file"
@@ -1294,7 +1439,7 @@ export default function Home() {
                   await pickLogo(setTeamCrestUrl, f, true);
                 }}
               />
-              <button type="button" className="league-row" onClick={() => teamCrestInputRef.current?.click()}>
+              <button type="button" className="league-row" {...dropZone((f) => pickLogo(setTeamCrestUrl, f, true))} onClick={() => teamCrestInputRef.current?.click()}>
                 {teamCrestUrl ? (
                   <img src={teamCrestUrl} alt="" className="crest-thumb" style={{ width: 26, height: 26 }} />
                 ) : (
@@ -1323,8 +1468,45 @@ export default function Home() {
             </div>
           )}
 
-          <div className="stack">
-            <div className="label">3 · Color de acento</div>
+          <div className={sectionClass("extra")}>
+            <button type="button" className="label section-head" onClick={() => toggleSection("extra")}><span>3 · Logos extra ({extraLogos.length}/6)</span><span className="chev" /></button>
+            <input
+              ref={extraInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              style={{ display: "none" }}
+              onChange={async (e) => {
+                const f = e.target.files?.[0] || null;
+                e.target.value = "";
+                if (f) await addExtraLogo(f);
+              }}
+            />
+            {extraLogos.map((lg, i) => (
+              <div className="tpl-item" key={lg.id}>
+                <button className="tpl-load" onClick={() => setLastDragged(lg.id)}>
+                  <img src={lg.url} alt="" className="extra-thumb" />
+                  Logo {i + 1}
+                </button>
+                <button className="tpl-del" onClick={() => removeExtraLogo(lg.id)} aria-label="Quitar logo">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {extraLogos.length < 6 && (
+              <button
+                className="tpl-new"
+                {...dropZone(addExtraLogo)}
+                onClick={() => extraInputRef.current?.click()}
+              >
+                + Añadir otro logo a la portada
+              </button>
+            )}
+          </div>
+
+          <div className={sectionClass("color")}>
+            <button type="button" className="label section-head" onClick={() => toggleSection("color")}><span>4 · Color de acento</span><span className="chev" /></button>
             <div className="swatch-row">
               <button
                 className={"swatch auto" + (!customColor ? " active" : "")}
@@ -1371,8 +1553,8 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="stack">
-            <div className="label">4 · Fondo personalizado</div>
+          <div className={sectionClass("fondo")}>
+            <button type="button" className="label section-head" onClick={() => toggleSection("fondo")}><span>5 · Fondo personalizado</span><span className="chev" /></button>
             <input
               ref={bgInputRef}
               type="file"
@@ -1386,7 +1568,7 @@ export default function Home() {
               }}
             />
             {!bgUrl ? (
-              <button className="dropzone" onClick={() => bgInputRef.current?.click()}>
+              <button className="dropzone" {...dropZone(async (f) => setBgUrl(await processPhoto(f, 1800)))} onClick={() => bgInputRef.current?.click()}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c9a24b" strokeWidth="1.6">
                   <rect x="3" y="4" width="18" height="16" rx="2" />
                   <circle cx="8.5" cy="9.5" r="1.5" />
@@ -1427,8 +1609,8 @@ export default function Home() {
             )}
           </div>
 
-          <div className="stack">
-            <div className="label">5 · Formato de salida</div>
+          <div className={sectionClass("formato")}>
+            <button type="button" className="label section-head" onClick={() => toggleSection("formato")}><span>6 · Formato de salida</span><span className="chev" /></button>
             <div className="chip-list">
               {Object.entries(RATIOS).map(([id, f]) => (
                 <button key={id} className={"chip" + (format === id ? " active" : "")} onClick={() => setFormat(id)}>
@@ -1439,8 +1621,8 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="stack">
-            <div className="label">6 · Redes sociales</div>
+          <div className={sectionClass("redes")}>
+            <button type="button" className="label section-head" onClick={() => toggleSection("redes")}><span>7 · Redes sociales</span><span className="chev" /></button>
             <div className="toggle-row">
               <div>
                 <div className="toggle-row-title">Mostrar usuario</div>
@@ -1504,8 +1686,8 @@ export default function Home() {
             )}
           </div>
 
-          <div className="stack">
-            <div className="label">7 · Marca de agua</div>
+          <div className={sectionClass("agua")}>
+            <button type="button" className="label section-head" onClick={() => toggleSection("agua")}><span>8 · Marca de agua</span><span className="chev" /></button>
             <div className="toggle-row">
               <div>
                 <div className="toggle-row-title">Mostrar marca de agua</div>
@@ -1531,7 +1713,7 @@ export default function Home() {
               }}
             />
             {!watermarkUrl ? (
-              <button className="dropzone" onClick={() => watermarkInputRef.current?.click()}>
+              <button className="dropzone" {...dropZone(async (f) => { await pickLogo(setWatermarkUrl, f, false); setWatermark(true); })} onClick={() => watermarkInputRef.current?.click()}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c9a24b" strokeWidth="1.6">
                   <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
                   <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
@@ -1663,6 +1845,7 @@ export default function Home() {
                     onPointerDown={startDrag("jornadaPill")}
                   >
                     {jornadaText || "Jornada 14"}
+                    {resizeHandle("jornadaPill")}
                   </div>
                 )}
                 {showVs && (
@@ -1676,6 +1859,7 @@ export default function Home() {
                     onPointerDown={startDrag("vsMark")}
                   >
                     {vsStyle === "guion" ? "—" : vsStyle === "punto" ? "·" : vsStyle === "versalita" ? "VS" : "vs"}
+                    {resizeHandle("vsMark")}
                   </div>
                 )}
                 {showVsLine && (
@@ -1695,6 +1879,7 @@ export default function Home() {
                   onPointerDown={startDrag("crestA")}
                 >
                   {crestAUrl ? <img src={crestAUrl} alt="" /> : "A"}
+                  {resizeHandle("crestA")}
                 </div>
                 <div
                   className={(crestBUrl ? "crest-logo" : "crest-mark") + " crest-b"}
@@ -1702,6 +1887,7 @@ export default function Home() {
                   onPointerDown={startDrag("crestB")}
                 >
                   {crestBUrl ? <img src={crestBUrl} alt="" /> : "B"}
+                  {resizeHandle("crestB")}
                 </div>
                 {leagueUrl && (
                   <div
@@ -1710,9 +1896,10 @@ export default function Home() {
                     onPointerDown={startDrag("leagueLogo")}
                   >
                     <img src={leagueUrl} alt="" />
+                    {resizeHandle("leagueLogo")}
                   </div>
                 )}
-                {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar<br />(la foto es opcional)</div>}
+                {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar · la foto es opcional</div>}
               </>
             )}
 
@@ -1723,7 +1910,7 @@ export default function Home() {
                     <img src={photoUrl} alt="" />
                   </div>
                 )}
-                {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar<br />(la foto es opcional)</div>}
+                {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar · la foto es opcional</div>}
                 <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
                   {teamCrestUrl ? (
                     <div className="team-logo" style={{ width: 22 * teamCrestScale }}>
@@ -1733,6 +1920,7 @@ export default function Home() {
                     <div className="team-mark" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
                   )}
                   <div className="team-label">Equipo</div>
+                  {resizeHandle("teamTag")}
                 </div>
               </>
             )}
@@ -1746,7 +1934,7 @@ export default function Home() {
                       <img src={p.url} alt="" />
                     </div>
                   ))}
-                {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar<br />(la foto es opcional)</div>}
+                {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar · la foto es opcional</div>}
                 <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
                   {teamCrestUrl ? (
                     <div className="team-logo" style={{ width: 22 * teamCrestScale }}>
@@ -1756,9 +1944,22 @@ export default function Home() {
                     <div className="team-mark" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
                   )}
                   <div className="team-label">Equipo</div>
+                  {resizeHandle("teamTag")}
                 </div>
               </>
             )}
+
+            {extraLogos.map((lg) => (
+              <div
+                key={lg.id}
+                className="extra-logo"
+                style={{ ...styleFor(lg.id), width: lg.scale * 10 + "%" }}
+                onPointerDown={startDrag(lg.id)}
+              >
+                <img src={lg.url} alt="" />
+                {resizeHandle(lg.id)}
+              </div>
+            ))}
 
             {showSocial && generated && socialText.trim() && (
               <div
@@ -1772,6 +1973,7 @@ export default function Home() {
               >
                 <SocialIcon platform={socialPlatform} />
                 <span>{socialText}</span>
+                {resizeHandle("social")}
               </div>
             )}
 
@@ -1786,10 +1988,11 @@ export default function Home() {
                 onPointerDown={startDrag("watermark")}
               >
                 <img src={watermarkUrl} alt="" />
+                {resizeHandle("watermark")}
               </div>
             )}
 
-            <div className={"safe-margin" + (dragActive ? " show" : "")} />
+            <div className={"safe-margin" + (dragActive || resizing ? " show" : "")} />
             {guides.x !== null && (
               <div className="snap-guide guide-v show" style={{ left: guides.x + "%" }} />
             )}
@@ -1849,8 +2052,42 @@ export default function Home() {
             </button>
           </div>
           <div className="stage-caption" style={{ opacity: 0.75 }}>
-            Arrastra los elementos — se alinean solos al centro y verás el margen seguro para recortes
+            Arrastra los elementos · tira de la esquina dorada para cambiar el tamaño
           </div>
+
+          {gallery.length > 0 && (
+            <div className="gallery">
+              <div className="gallery-head">
+                <span className="crest-label">Últimas portadas</span>
+                <button
+                  className="reset-link"
+                  onClick={() => {
+                    setGallery([]);
+                    try {
+                      localStorage.removeItem(LS_GALLERY);
+                    } catch {}
+                  }}
+                >
+                  Vaciar
+                </button>
+              </div>
+              <div className="gallery-row">
+                {gallery.map((g) => (
+                  <a
+                    key={g.id}
+                    className="gallery-item"
+                    href={g.thumb}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`${g.category} · ${g.fecha}`}
+                  >
+                    <img src={g.thumb} alt="" />
+                    <span>{g.fecha}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1882,14 +2119,26 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .draft-note{font-size:11.5px;color:var(--text-faint);letter-spacing:0.08em;text-transform:uppercase;}
 .avatar{width:34px;height:34px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:14px;color:var(--gold);}
 .body{display:flex;flex:1;min-height:0;}
-.panel{width:388px;flex-shrink:0;border-right:1px solid var(--border);padding:28px 28px 40px 28px;display:flex;flex-direction:column;gap:26px;overflow-y:auto;max-height:calc(100vh - 78px);}
+.panel{width:388px;flex-shrink:0;border-right:1px solid var(--border);padding:24px 28px 40px 28px;display:flex;flex-direction:column;gap:18px;overflow-y:auto;max-height:calc(100vh - 78px);}
 .label{font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-faint);}
+.section-head{display:flex;align-items:center;justify-content:space-between;width:100%;
+  background:none;border:none;padding:2px 0;text-align:left;font-size:11px;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--text-faint);cursor:pointer;}
+.section-head:hover{color:var(--text-dim);}
+.section.open .section-head{color:var(--text-dim);}
+.chev{width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;
+  transform:rotate(-45deg);margin-right:3px;transition:transform .18s ease;flex-shrink:0;}
+.section.open .chev{transform:rotate(45deg);}
+/* Al plegar, se oculta todo menos la propia cabecera */
+.section:not(.open){gap:0;}
+.section:not(.open) > *:not(.section-head){display:none;}
 .stack{display:flex;flex-direction:column;gap:10px;}
 .tabs{display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px;}
 .tab{flex:1;padding:9px 4px;border:none;border-radius:7px;font-size:12.5px;font-weight:600;background:transparent;color:var(--text-dim);transition:background .15s,color .15s;}
 .tab.active{background:var(--gold);color:var(--gold-ink);}
 .dropzone{display:flex;flex-direction:column;align-items:center;gap:10px;padding:26px 16px;background:var(--surface);border:1.5px dashed var(--border-strong);border-radius:10px;color:var(--text-dim);text-align:center;width:100%;}
 .dropzone:hover{border-color:var(--gold);}
+.dragging-over{border-color:var(--gold)!important;background:var(--gold-soft)!important;}
 .dropzone-title{font-size:13px;color:var(--text);font-weight:600;}
 .dropzone-sub{font-size:12px;color:var(--text-faint);}
 .photo-card{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;}
@@ -1953,7 +2202,8 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:99;background:var(--surface-2);border:1px solid var(--gold);color:var(--text);padding:10px 18px;border-radius:9px;font-size:13px;font-weight:600;box-shadow:0 10px 30px -8px rgba(0,0,0,.7);}
 .tpl-list{display:flex;flex-direction:column;gap:5px;}
 .tpl-item{display:flex;gap:5px;}
-.tpl-load{flex:1;text-align:left;padding:10px 12px;border-radius:8px;font-size:12.5px;font-weight:600;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);}
+.extra-thumb{width:20px;height:20px;object-fit:contain;vertical-align:middle;margin-right:8px;}
+.tpl-load{flex:1;text-align:left;display:flex;align-items:center;padding:10px 12px;border-radius:8px;font-size:12.5px;font-weight:600;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);}
 .tpl-load:hover{border-color:var(--gold);color:var(--text);}
 .tpl-del{padding:0 9px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-faint);display:flex;align-items:center;}
 .tpl-del:hover{color:#d2624f;border-color:#d2624f;}
@@ -1981,7 +2231,7 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .diagonal-sweep{position:absolute;inset:0;pointer-events:none;}
 .accent-circle{position:absolute;right:4%;top:10%;width:42%;aspect-ratio:1;border-radius:50%;}
 .accent-line{position:absolute;left:6%;top:9%;width:14%;height:2px;background:var(--gold);opacity:.6;}
-.jornada{position:absolute;left:50%;top:29%;transform:translateX(-50%);white-space:nowrap;line-height:1.2;}
+.jornada{position:absolute;left:50%;top:44%;transform:translateX(-50%);white-space:nowrap;line-height:1.2;}
 .j-limpio{font-family:var(--font-sans);font-weight:600;letter-spacing:.28em;text-transform:uppercase;color:var(--text);text-shadow:0 2px 10px rgba(0,0,0,.6);}
 .j-serif{font-family:var(--font-display);font-weight:500;font-style:italic;letter-spacing:.02em;color:var(--text);text-shadow:0 2px 10px rgba(0,0,0,.6);}
 .j-bloque{font-family:var(--font-sans);font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#0b0a09;padding:.5em 1em;}
@@ -1992,12 +2242,12 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .v-versalita{font-family:var(--font-sans);font-weight:700;letter-spacing:.18em;}
 .v-guion{font-family:var(--font-sans);font-weight:300;}
 .v-punto{font-family:var(--font-sans);font-weight:700;}
-.vs-line{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:linear-gradient(180deg,transparent 0%,rgba(243,237,224,.45) 50%,transparent 100%);border-radius:2px;}
+.vs-line{position:absolute;left:50%;top:62%;transform:translate(-50%,-50%);background:linear-gradient(180deg,transparent 0%,rgba(243,237,224,.45) 50%,transparent 100%);border-radius:2px;}
 .crest-mark{width:11%;aspect-ratio:1;border-radius:50%;background:var(--surface-2);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:3.4cqw;color:var(--text-dim);position:absolute;top:13%;}
 .crest-logo{position:absolute;top:13%;filter:drop-shadow(0 3px 10px rgba(0,0,0,.55));}
 .crest-logo img{width:100%;height:auto;display:block;object-fit:contain;}
-.crest-a{left:50%;transform:translateX(calc(-100% - 5.5%));}
-.crest-b{left:calc(50% + 5.5%);}
+.crest-a{right:calc(50% + 4%);left:auto;}
+.crest-b{left:calc(50% + 4%);}
 .league-mark{position:absolute;left:50%;top:3%;transform:translateX(-50%);width:6%;filter:drop-shadow(0 3px 8px rgba(0,0,0,.5));}
 .league-mark img{width:100%;height:auto;display:block;object-fit:contain;}
 .team-tag{position:absolute;left:8%;bottom:9%;display:flex;align-items:center;gap:7px;opacity:.85;}
@@ -2005,30 +2255,53 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .team-logo{filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));}
 .team-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .team-label{font-family:var(--font-sans);font-size:10px;letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase;}
-.empty-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);font-size:12px;color:var(--text-faint);text-align:center;letter-spacing:.04em;line-height:1.5;}
+.empty-note{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);z-index:4;padding:7px 16px;border-radius:999px;background:rgba(6,5,5,.72);border:1px solid var(--border);font-family:var(--font-sans);font-size:11.5px;color:var(--text-dim);text-align:center;letter-spacing:.03em;white-space:nowrap;}
 .social-tag{position:absolute;left:5%;bottom:6%;display:flex;align-items:center;gap:.5em;color:var(--text);font-family:var(--font-sans);font-weight:600;letter-spacing:.04em;line-height:1;text-shadow:0 2px 8px rgba(0,0,0,.6);white-space:nowrap;}
+.extra-logo{position:absolute;left:22%;top:60%;filter:drop-shadow(0 3px 10px rgba(0,0,0,.55));}
+.extra-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .watermark-logo{position:absolute;right:4%;bottom:4%;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));}
 .watermark-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .photo-frame{position:absolute;overflow:hidden;z-index:1;}
 .photo-frame img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.15) brightness(.92);display:block;}
-.photo-frame-individual{right:6%;bottom:0;width:46%;height:92%;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
-.photo-frame-colectivo{left:50%;bottom:0;width:60%;height:80%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%);mask-image:linear-gradient(to bottom,transparent 0%,black 16%);}
-.photo-frame-partido{left:50%;bottom:0;width:46%;height:74%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 20%);mask-image:linear-gradient(to bottom,transparent 0%,black 20%);}
-.jornada,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo,.vs-mark,.social-tag,.vs-line{cursor:grab;touch-action:none;z-index:3;}
-.jornada:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover,.vs-mark:hover,.social-tag:hover,.vs-line:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
-.jornada:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active,.vs-mark:active,.social-tag:active,.vs-line:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
+.photo-frame-individual{right:6%;bottom:0;width:46%;height:92%;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);mask-composite:intersect;}
+.photo-frame-colectivo{left:50%;bottom:0;width:60%;height:80%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);mask-composite:intersect;}
+.photo-frame-partido{left:50%;bottom:0;width:46%;height:74%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);mask-composite:intersect;}
+.jornada,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo,.vs-mark,.social-tag,.vs-line,.extra-logo{cursor:grab;touch-action:none;z-index:3;}
+.jornada:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover,.vs-mark:hover,.social-tag:hover,.vs-line:hover,.extra-logo:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
+.jornada:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active,.vs-mark:active,.social-tag:active,.vs-line:active,.extra-logo:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
 .safe-margin{position:absolute;inset:6%;border:1px dashed rgba(243,237,224,.3);pointer-events:none;opacity:0;transition:opacity .15s ease;border-radius:2px;}
 .safe-margin.show{opacity:1;}
 .snap-guide{position:absolute;background:var(--gold);opacity:0;pointer-events:none;transition:opacity .08s ease;box-shadow:0 0 6px rgba(201,162,75,.6);}
 .snap-guide.show{opacity:.85;}
 .guide-v{top:0;bottom:0;width:1px;transform:translateX(-50%);}
 .guide-h{left:0;right:0;height:1px;transform:translateY(-50%);}
+.gallery{width:min(100%,860px);margin-top:6px;}
+.gallery-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.gallery-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;}
+.gallery-item{flex:0 0 auto;width:110px;text-decoration:none;}
+.gallery-item img{width:100%;border-radius:5px;border:1px solid var(--border);display:block;transition:border-color .15s;}
+.gallery-item:hover img{border-color:var(--gold);}
+.gallery-item span{display:block;font-size:10px;color:var(--text-faint);margin-top:4px;text-align:center;}
+.resize-handle{position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;border-radius:50%;background:var(--gold);border:2px solid var(--bg);cursor:nwse-resize;touch-action:none;z-index:12;box-shadow:0 1px 4px rgba(0,0,0,.6);}
+.resize-handle:hover{transform:scale(1.25);}
 .reset-link{font-size:12px;background:none;border:none;color:var(--text-faint);padding:0;}
 .reset-link:hover{color:var(--gold);}
 .reset-link.danger:hover{color:#d2624f;}
 @media (max-width:860px){
+  /* La vista previa va ARRIBA y se queda fija: en móvil el panel es tan
+     largo que la portada quedaba fuera de pantalla y se editaba a ciegas. */
   .body{flex-direction:column;}
-  .panel{width:100%;max-height:none;border-right:none;border-bottom:1px solid var(--border);}
-  .stage{padding:28px;}
+  .stage{order:-1;position:sticky;top:0;z-index:20;padding:14px 14px 16px;gap:10px;
+    background:var(--bg);border-bottom:1px solid var(--border);}
+  .preview{width:100%;}
+  .panel{width:100%;max-height:none;border-right:none;padding:20px 18px 40px;}
+  .stage-caption{font-size:11px;text-align:center;}
+  /* La cabecera se pisaba consigo misma al no caber en una línea */
+  .topbar{padding:14px 18px;gap:10px;}
+  .brand{flex-wrap:wrap;gap:8px;}
+  .brand-name{font-size:17px;}
+  .brand-sub,.brand-div,.draft-note{display:none;}
+  .align-bar{gap:4px;}
+  .align-btn{padding:5px 9px;font-size:11px;}
 }
 `;
