@@ -120,6 +120,10 @@ export default function Home() {
   const [showAccentLine, setShowAccentLine] = useState(false);
   const [lastDragged, setLastDragged] = useState(null);
   const [resizing, setResizing] = useState(false);
+  const [recortar, setRecortar] = useState(true);
+  const [photoCutUrl, setPhotoCutUrl] = useState(null);
+  const [colectivoCut, setColectivoCut] = useState([]);
+  const [progreso, setProgreso] = useState("");
   // Secciones plegables: el panel había crecido a 78 controles y 3 pantallas
   // de scroll. Solo se despliega aquello en lo que estás trabajando.
   const [openSections, setOpenSections] = useState({ foto: true, equipos: true });
@@ -219,6 +223,7 @@ export default function Home() {
     watermark,
     watermarkScale,
     watermarkOpacity,
+    recortar,
     positions,
   };
 
@@ -255,6 +260,7 @@ export default function Home() {
     if (typeof s.watermark === "boolean") setWatermark(s.watermark);
     if (typeof s.watermarkScale === "number") setWatermarkScale(s.watermarkScale);
     if (typeof s.watermarkOpacity === "number") setWatermarkOpacity(s.watermarkOpacity);
+    if (typeof s.recortar === "boolean") setRecortar(s.recortar);
     setPositions(s.positions || {});
   }
 
@@ -537,6 +543,8 @@ export default function Home() {
   function resetForNewPhoto() {
     setGenerated(false);
     setGenerating(false);
+    setPhotoCutUrl(null);
+    setColectivoCut([]);
   }
 
   function selectCategory(cat) {
@@ -552,6 +560,8 @@ export default function Home() {
     setTeamCrestUrl(null);
     setColectivoPhotos([]);
     setExtraLogos([]);
+    setPhotoCutUrl(null);
+    setColectivoCut([]);
     setCrestScale(1);
     setLeagueScale(1);
     setTeamCrestScale(1);
@@ -592,14 +602,61 @@ export default function Home() {
   const hasContent =
     hasPhoto || !!bgUrl || !!crestAUrl || !!crestBUrl || !!leagueUrl || !!teamCrestUrl;
 
-  function handleGenerate() {
+  async function handleGenerate() {
     if (!hasContent || generating) return;
     setGenerating(true);
     setGenerated(false);
-    setTimeout(() => {
+    setProgreso("");
+
+    if (!recortar) {
+      setPhotoCutUrl(null);
+      setColectivoCut([]);
       setGenerating(false);
       setGenerated(true);
-    }, 1200);
+      return;
+    }
+
+    try {
+      // La librería vive en el navegador y pesa; se carga solo al usarla.
+      const { removeBackground } = await import("@imgly/background-removal");
+      const opciones = (etiqueta) => ({
+        model: "isnet_fp16",
+        output: { format: "image/png", quality: 0.9 },
+        progress: (clave, hecho, total) => {
+          if (/fetch|download/i.test(clave)) {
+            setProgreso("Descargando el modelo por primera vez… " + Math.round((hecho / total) * 100) + "%");
+          } else {
+            setProgreso(etiqueta);
+          }
+        },
+      });
+
+      const recorta = async (src, etiqueta) => {
+        const blob = await (await fetch(src)).blob();
+        const salida = await removeBackground(blob, opciones(etiqueta));
+        return await fileToDataUrl(salida);
+      };
+
+      if (category === "colectivo") {
+        const cortes = [];
+        for (let i = 0; i < colectivoPhotos.length; i++) {
+          cortes.push(await recorta(colectivoPhotos[i].url, `Recortando foto ${i + 1} de ${colectivoPhotos.length}…`));
+        }
+        setColectivoCut(cortes);
+      } else if (photoUrl) {
+        setPhotoCutUrl(await recorta(photoUrl, "Recortando al jugador…"));
+      }
+      setGenerated(true);
+    } catch (err) {
+      console.error("Fallo el recorte automático", err);
+      setPhotoCutUrl(null);
+      setColectivoCut([]);
+      setGenerated(true);
+      showToast("No se pudo recortar — se usa la foto original");
+    } finally {
+      setGenerating(false);
+      setProgreso("");
+    }
   }
 
   // Guarda una miniatura ligera de cada portada exportada, para poder
@@ -865,6 +922,8 @@ export default function Home() {
     setPhotoName("");
     setColectivoPhotos([]);
     setExtraLogos([]);
+    setPhotoCutUrl(null);
+    setColectivoCut([]);
     setGenerated(false);
     setGenerating(false);
     setPositions({});
@@ -1468,6 +1527,18 @@ export default function Home() {
             </div>
           )}
 
+          <div className="toggle-row" style={{ marginBottom: 4 }}>
+            <div>
+              <div className="toggle-row-title">Recortar la foto</div>
+              <div className="toggle-row-sub">
+                {recortar ? "Quita el fondo al generar (~10s)" : "Se usa la foto tal cual"}
+              </div>
+            </div>
+            <button className={"switch" + (recortar ? " on" : "")} onClick={() => setRecortar((v) => !v)}>
+              <div className="switch-knob" />
+            </button>
+          </div>
+
           <div className={sectionClass("extra")}>
             <button type="button" className="label section-head" onClick={() => toggleSection("extra")}><span>3 · Logos extra ({extraLogos.length}/6)</span><span className="chev" /></button>
             <input
@@ -1825,8 +1896,8 @@ export default function Home() {
             {category === "partido" && (
               <>
                 {generated && photoUrl && (
-                  <div className="photo-frame photo-frame-partido" style={photoFrameStyle()}>
-                    <img src={photoUrl} alt="" />
+                  <div className={"photo-frame photo-frame-partido" + (photoCutUrl ? " recortada" : "")} style={photoFrameStyle()}>
+                    <img src={photoCutUrl || photoUrl} alt="" />
                   </div>
                 )}
                 {showJornada && (
@@ -1906,8 +1977,8 @@ export default function Home() {
             {category === "individual" && (
               <>
                 {generated && photoUrl && (
-                  <div className="photo-frame photo-frame-individual">
-                    <img src={photoUrl} alt="" />
+                  <div className={"photo-frame photo-frame-individual" + (photoCutUrl ? " recortada" : "")}>
+                    <img src={photoCutUrl || photoUrl} alt="" />
                   </div>
                 )}
                 {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar · la foto es opcional</div>}
@@ -1930,8 +2001,8 @@ export default function Home() {
                 {generated &&
                   colectivoPhotos.length > 0 &&
                   colectivoPhotos.map((p, i) => (
-                    <div className="photo-frame" style={colectivoFrameStyle(i, colectivoPhotos.length)} key={p.url}>
-                      <img src={p.url} alt="" />
+                    <div className={"photo-frame" + (colectivoCut[i] ? " recortada" : "")} style={colectivoFrameStyle(i, colectivoPhotos.length)} key={p.url}>
+                      <img src={colectivoCut[i] || p.url} alt="" />
                     </div>
                   ))}
                 {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar · la foto es opcional</div>}
@@ -2003,7 +2074,7 @@ export default function Home() {
             {generating && (
               <div className="stage-loading show">
                 <div className="ring" />
-                <div className="stage-loading-text">Generando portada…</div>
+                <div className="stage-loading-text">{progreso || "Generando portada…"}</div>
               </div>
             )}
           </div>
@@ -2262,6 +2333,9 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .watermark-logo{position:absolute;right:4%;bottom:4%;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));}
 .watermark-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .photo-frame{position:absolute;overflow:hidden;z-index:1;}
+/* Ya recortada: tiene transparencia real, difuminar los bordes la estropearía */
+.photo-frame.recortada{-webkit-mask-image:none!important;mask-image:none!important;overflow:visible;}
+.photo-frame.recortada img{object-fit:contain;filter:grayscale(1) contrast(1.12) brightness(.95) drop-shadow(0 10px 26px rgba(0,0,0,.55));}
 .photo-frame img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.15) brightness(.92);display:block;}
 .photo-frame-individual{right:6%;bottom:0;width:46%;height:92%;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);mask-composite:intersect;}
 .photo-frame-colectivo{left:50%;bottom:0;width:60%;height:80%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);mask-composite:intersect;}
