@@ -618,7 +618,13 @@ export default function Home() {
 
     try {
       // La librería vive en el navegador y pesa; se carga solo al usarla.
-      const { removeBackground } = await import("@imgly/background-removal");
+      // Se carga desde su CDN en tiempo de ejecución, NO empaquetada: el
+      // compilador de Next no digiere onnxruntime-web ("import and export
+      // cannot be used outside of module code") y tumbaba el despliegue.
+      // webpackIgnore deja el import intacto para que lo resuelva el navegador.
+      const { removeBackground } = await import(
+        /* webpackIgnore: true */ "https://esm.sh/@imgly/background-removal@1.5.8"
+      );
       const opciones = (etiqueta) => ({
         model: "isnet_fp16",
         output: { format: "image/png", quality: 0.9 },
