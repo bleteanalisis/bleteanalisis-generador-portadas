@@ -731,10 +731,15 @@ export default function Home() {
         skipFonts: true,
       };
 
-      // La primera captura de html-to-image suele salir incompleta.
-      await toPng(node, opts);
-      await new Promise((r) => setTimeout(r, 80));
-      const dataUrl = await toPng(node, opts);
+      // Una sola captura: ya se ha esperado a fuentes e imágenes, así que
+      // la de calentamiento que había antes solo duplicaba el trabajo.
+      // Con tope de tiempo para que el botón no pueda quedarse bloqueado.
+      const dataUrl = await Promise.race([
+        toPng(node, opts),
+        new Promise((_, rechaza) =>
+          setTimeout(() => rechaza(new Error("La exportación tardó demasiado")), 25000)
+        ),
+      ]);
 
       if (!dataUrl || dataUrl.length < 5000) {
         showToast("La exportación salió vacía — inténtalo otra vez");
@@ -751,7 +756,7 @@ export default function Home() {
       );
     } catch (err) {
       console.error("Error exportando PNG", err);
-      showToast("No se pudo exportar — inténtalo otra vez");
+      showToast(err?.message?.includes("demasiado") ? "La exportación tardó demasiado — inténtalo otra vez" : "No se pudo exportar — inténtalo otra vez");
     } finally {
       setExporting(false);
     }
