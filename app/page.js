@@ -120,6 +120,9 @@ export default function Home() {
   const [showAccentLine, setShowAccentLine] = useState(false);
   const [lastDragged, setLastDragged] = useState(null);
   const [resizing, setResizing] = useState(false);
+  const [showTeamTag, setShowTeamTag] = useState(true);
+  const [teamTagText, setTeamTagText] = useState("Equipo");
+  const [colectivoScale, setColectivoScale] = useState({});
   const [recortar, setRecortar] = useState(true);
   const [photoCutUrl, setPhotoCutUrl] = useState(null);
   const [colectivoCut, setColectivoCut] = useState([]);
@@ -224,6 +227,8 @@ export default function Home() {
     watermarkScale,
     watermarkOpacity,
     recortar,
+    showTeamTag,
+    teamTagText,
     positions,
   };
 
@@ -261,6 +266,8 @@ export default function Home() {
     if (typeof s.watermarkScale === "number") setWatermarkScale(s.watermarkScale);
     if (typeof s.watermarkOpacity === "number") setWatermarkOpacity(s.watermarkOpacity);
     if (typeof s.recortar === "boolean") setRecortar(s.recortar);
+    if (typeof s.showTeamTag === "boolean") setShowTeamTag(s.showTeamTag);
+    if (typeof s.teamTagText === "string") setTeamTagText(s.teamTagText);
     setPositions(s.positions || {});
   }
 
@@ -581,6 +588,7 @@ export default function Home() {
     setShowAccentLine(false);
     setVsLineLength(50);
     setVsLineThickness(1);
+    setColectivoScale({});
     setLastDragged(null);
   }
 
@@ -852,12 +860,22 @@ export default function Home() {
     vsMark: [vsSize, setVsSize, 0.5, 3],
     social: [socialSize, setSocialSize, 0.5, 3],
     watermark: [watermarkScale, setWatermarkScale, 0.4, 3],
+    photo: [photoScale, setPhotoScale, 0.3, 2.5],
   };
 
   function scaleOf(key) {
     if (SCALES[key]) return SCALES[key];
     const ex = extraLogos.find((x) => x.id === key);
     if (ex) return [ex.scale, (v) => setExtraScale(key, v), 0.3, 4];
+    if (key.startsWith("foto-")) {
+      const i = Number(key.slice(5));
+      return [
+        colectivoScale[i] || 1,
+        (v) => setColectivoScale((c) => ({ ...c, [i]: v })),
+        0.3,
+        2.5,
+      ];
+    }
     return null;
   }
 
@@ -954,6 +972,7 @@ export default function Home() {
     setShowAccentLine(false);
     setVsLineLength(50);
     setVsLineThickness(1);
+    setColectivoScale({});
     setLastDragged(null);
     setPhotoScale(1);
     setPhotoOffsetY(0);
@@ -974,10 +993,21 @@ export default function Home() {
   }
 
   function photoFrameStyle() {
-    return {
+    const base = {
       width: 46 * photoScale + "%",
       height: 74 * photoScale + "%",
       bottom: photoOffsetY + "%",
+    };
+    // Si la has movido a mano, tu posición manda sobre la de partida.
+    const p = positions.photo;
+    if (!p) return base;
+    return {
+      ...base,
+      left: p.left + "%",
+      top: p.top + "%",
+      right: "auto",
+      bottom: "auto",
+      transform: "translate(-50%,-50%)",
     };
   }
 
@@ -991,11 +1021,14 @@ export default function Home() {
     const startLeft = (100 - totalWidth) / 2;
     let left = startLeft;
     for (let i = 0; i < index; i++) left += widths[i] + gap;
+    const manual = positions["foto-" + index];
+    const colocacion = manual
+      ? { left: manual.left + "%", top: manual.top + "%", transform: "translate(-50%,-50%)" }
+      : { left: left + "%", bottom: 0 };
     return {
-      left: left + "%",
-      width: widths[index] + "%",
-      height: heightList[index] + "%",
-      bottom: 0,
+      ...colocacion,
+      width: widths[index] * (colectivoScale[index] || 1) + "%",
+      height: heightList[index] * (colectivoScale[index] || 1) + "%",
       WebkitMaskImage:
         "linear-gradient(to bottom, transparent 0%, #000 14%, #000 86%, transparent 100%), linear-gradient(to right, transparent 0%, #000 10%, #000 90%, transparent 100%)",
       WebkitMaskComposite: "source-in",
@@ -1476,6 +1509,20 @@ export default function Home() {
                   <div className="photo-status">{teamCrestUrl ? "Escudo cargado" : "Escudo (discreto) — toca para subir"}</div>
                 </div>
               </button>
+              <div className="toggle-row">
+                <div className="toggle-row-title">Mostrar etiqueta</div>
+                <button className={"switch" + (showTeamTag ? " on" : "")} onClick={() => setShowTeamTag((v) => !v)}>
+                  <div className="switch-knob" />
+                </button>
+              </div>
+              {showTeamTag && (
+                <input
+                  className="field-static field-input"
+                  value={teamTagText}
+                  onChange={(e) => setTeamTagText(e.target.value)}
+                  placeholder="Texto de la etiqueta (déjalo vacío para quitarlo)"
+                />
+              )}
               {teamCrestUrl && (
                 <div className="blur-row">
                   <span className="crest-label">Tamaño</span>
@@ -1517,6 +1564,20 @@ export default function Home() {
                 )}
                 <div className="photo-status">{teamCrestUrl ? "Escudo cargado" : "Escudo del equipo — toca para subir"}</div>
               </button>
+              <div className="toggle-row">
+                <div className="toggle-row-title">Mostrar etiqueta</div>
+                <button className={"switch" + (showTeamTag ? " on" : "")} onClick={() => setShowTeamTag((v) => !v)}>
+                  <div className="switch-knob" />
+                </button>
+              </div>
+              {showTeamTag && (
+                <input
+                  className="field-static field-input"
+                  value={teamTagText}
+                  onChange={(e) => setTeamTagText(e.target.value)}
+                  placeholder="Texto de la etiqueta (déjalo vacío para quitarlo)"
+                />
+              )}
               {teamCrestUrl && (
                 <div className="blur-row">
                   <span className="crest-label">Tamaño</span>
@@ -1907,8 +1968,9 @@ export default function Home() {
             {category === "partido" && (
               <>
                 {generated && photoUrl && (
-                  <div className={"photo-frame photo-frame-partido" + (photoCutUrl ? " recortada" : "")} style={photoFrameStyle()}>
+                  <div className={"photo-frame photo-frame-partido" + (photoCutUrl ? " recortada" : "")} style={photoFrameStyle()} onPointerDown={startDrag("photo")}>
                     <img src={photoCutUrl || photoUrl} alt="" />
+                    {resizeHandle("photo")}
                   </div>
                 )}
                 {showJornada && (
@@ -1988,22 +2050,29 @@ export default function Home() {
             {category === "individual" && (
               <>
                 {generated && photoUrl && (
-                  <div className={"photo-frame photo-frame-individual" + (photoCutUrl ? " recortada" : "")}>
+                  <div className={"photo-frame photo-frame-individual" + (photoCutUrl ? " recortada" : "")} style={photoFrameStyle()} onPointerDown={startDrag("photo")}>
                     <img src={photoCutUrl || photoUrl} alt="" />
+                    {resizeHandle("photo")}
                   </div>
                 )}
                 {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar · la foto es opcional</div>}
-                <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
-                  {teamCrestUrl ? (
-                    <div className="team-logo" style={{ width: 22 * teamCrestScale }}>
-                      <img src={teamCrestUrl} alt="" />
-                    </div>
-                  ) : (
-                    <div className="team-mark" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
-                  )}
-                  <div className="team-label">Equipo</div>
-                  {resizeHandle("teamTag")}
-                </div>
+                {showTeamTag && (teamCrestUrl || teamTagText.trim() || !generated) && (
+                  <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
+                    {teamCrestUrl ? (
+                      <div className="team-logo" style={{ width: 22 * teamCrestScale }}>
+                        <img src={teamCrestUrl} alt="" />
+                      </div>
+                    ) : (
+                      // El círculo vacío es solo una guía mientras compones:
+                      // no debe colarse en la portada ya generada.
+                      !generated && (
+                        <div className="team-mark" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
+                      )
+                    )}
+                    {teamTagText.trim() && <div className="team-label">{teamTagText}</div>}
+                    {resizeHandle("teamTag")}
+                  </div>
+                )}
               </>
             )}
 
@@ -2012,22 +2081,29 @@ export default function Home() {
                 {generated &&
                   colectivoPhotos.length > 0 &&
                   colectivoPhotos.map((p, i) => (
-                    <div className={"photo-frame" + (colectivoCut[i] ? " recortada" : "")} style={colectivoFrameStyle(i, colectivoPhotos.length)} key={p.url}>
+                    <div className={"photo-frame" + (colectivoCut[i] ? " recortada" : "")} style={colectivoFrameStyle(i, colectivoPhotos.length)} onPointerDown={startDrag("foto-" + i)} key={p.url}>
                       <img src={colectivoCut[i] || p.url} alt="" />
+                      {resizeHandle("foto-" + i)}
                     </div>
                   ))}
                 {!generated && <div className="empty-note">Añade lo que quieras y pulsa Generar · la foto es opcional</div>}
-                <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
-                  {teamCrestUrl ? (
-                    <div className="team-logo" style={{ width: 22 * teamCrestScale }}>
-                      <img src={teamCrestUrl} alt="" />
-                    </div>
-                  ) : (
-                    <div className="team-mark" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
-                  )}
-                  <div className="team-label">Equipo</div>
-                  {resizeHandle("teamTag")}
-                </div>
+                {showTeamTag && (teamCrestUrl || teamTagText.trim() || !generated) && (
+                  <div className="team-tag" style={styleFor("teamTag")} onPointerDown={startDrag("teamTag")}>
+                    {teamCrestUrl ? (
+                      <div className="team-logo" style={{ width: 22 * teamCrestScale }}>
+                        <img src={teamCrestUrl} alt="" />
+                      </div>
+                    ) : (
+                      // El círculo vacío es solo una guía mientras compones:
+                      // no debe colarse en la portada ya generada.
+                      !generated && (
+                        <div className="team-mark" style={{ width: 20 * teamCrestScale, height: 20 * teamCrestScale }} />
+                      )
+                    )}
+                    {teamTagText.trim() && <div className="team-label">{teamTagText}</div>}
+                    {resizeHandle("teamTag")}
+                  </div>
+                )}
               </>
             )}
 
@@ -2343,7 +2419,9 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .extra-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .watermark-logo{position:absolute;right:4%;bottom:4%;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));}
 .watermark-logo img{width:100%;height:auto;display:block;object-fit:contain;}
-.photo-frame{position:absolute;overflow:hidden;z-index:1;}
+.photo-frame{position:absolute;overflow:hidden;z-index:1;cursor:grab;touch-action:none;}
+.photo-frame:hover{outline:1px dashed rgba(243,237,224,.35);outline-offset:3px;}
+.photo-frame:active{cursor:grabbing;outline:1px dashed var(--gold);}
 /* Ya recortada: tiene transparencia real, difuminar los bordes la estropearía */
 .photo-frame.recortada{-webkit-mask-image:none!important;mask-image:none!important;overflow:visible;}
 .photo-frame.recortada img{object-fit:contain;filter:grayscale(1) contrast(1.12) brightness(.95) drop-shadow(0 10px 26px rgba(0,0,0,.55));}
