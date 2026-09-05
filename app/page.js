@@ -313,6 +313,10 @@ export default function Home() {
     function onKey(e) {
       const tag = (e.target?.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea") return;
+      if (e.key === "Escape") {
+        setLastDragged(null);
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         const stack = historyRef.current;
@@ -737,6 +741,18 @@ export default function Home() {
         // el navegador ya las tiene cargadas y las pinta igual. Sin esto,
         // la exportación tarda 6 veces más y llena la consola de errores.
         skipFonts: true,
+        // Fuera todo lo que es andamiaje de edición: el tirador dorado se
+        // estaba colando en el PNG descargado.
+        filter: (nodo) => {
+          const c = nodo?.classList;
+          if (!c) return true;
+          return !(
+            c.contains("resize-handle") ||
+            c.contains("safe-margin") ||
+            c.contains("snap-guide") ||
+            c.contains("stage-loading")
+          );
+        },
       };
 
       // Una sola captura: ya se ha esperado a fuentes e imágenes, así que
@@ -921,6 +937,12 @@ export default function Home() {
         }}
       />
     );
+  }
+
+  // Pinchar en una zona vacía quita la selección, para que el tirador
+  // dorado desaparezca de la vista antes de descargar.
+  function soltarSeleccion(e) {
+    if (e.target === e.currentTarget) setLastDragged(null);
   }
 
   function resetPositions() {
@@ -1929,11 +1951,12 @@ export default function Home() {
           </button>
         </div>
 
-        <div className="stage">
+        <div className="stage" onPointerDown={soltarSeleccion}>
           <div
             ref={previewRef}
             className="preview"
             style={{ aspectRatio: fmt.ratio }}
+            onPointerDown={soltarSeleccion}
           >
             {bgUrl && (
               <div className="custom-bg">
