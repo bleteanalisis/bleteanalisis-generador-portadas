@@ -16,6 +16,42 @@ const SWEEPS = {
 };
 const SNAP_LINES = [6, 25, 33.333, 50, 66.667, 75, 94];
 const TEXT_COLORS = ["#f3ede4", "#c9a24b", "#b23a2f", "#3a6a8c", "#0b0a09"];
+// Estilos de texto: no son fuentes sueltas, son tratamientos editoriales
+// completos (fuente + peso + caja + espaciado) para que salga bien sin pelearse.
+const ESTILOS_TEXTO = {
+  serif: "Serif",
+  destacado: "Destacado",
+  condensada: "Condensada",
+  limpio: "Limpio",
+  fino: "Fino",
+};
+const FONDOS_TEXTO = ["#e8c33c", "#f3ede4", "#c9a24b", "#b23a2f", "#0b0a09"];
+const ALINEACIONES = { izquierda: "Izq.", centro: "Centro", derecha: "Der." };
+// Parejas listas: la estructura de dos líneas que se repite en portada, ya
+// estilada y colocada, para no montarla a mano cada semana.
+const PAREJAS_TEXTO = {
+  veredicto: {
+    nombre: "Nombre + veredicto",
+    bloques: [
+      { contenido: "Nombre", estilo: "serif", escala: 1.15, color: "#f3ede4", align: "izquierda", left: 26, top: 32 },
+      { contenido: "Lo resolvió", estilo: "destacado", escala: 1.5, color: "#f3ede4", fondo: "#e8c33c", align: "izquierda", left: 26, top: 46 },
+    ],
+  },
+  titular: {
+    nombre: "Antetítulo + titular",
+    bloques: [
+      { contenido: "Análisis táctico", estilo: "fino", escala: 0.5, color: "#c9a24b", align: "izquierda", left: 26, top: 30 },
+      { contenido: "La salida de balón", estilo: "condensada", escala: 1.7, color: "#f3ede4", align: "izquierda", left: 26, top: 41 },
+    ],
+  },
+  marcador: {
+    nombre: "Marcador + lectura",
+    bloques: [
+      { contenido: "2-1", estilo: "condensada", escala: 2.2, color: "#f3ede4", align: "izquierda", left: 24, top: 62 },
+      { contenido: "Cómo se ganó por dentro", estilo: "fino", escala: 0.5, color: "#c9a24b", align: "izquierda", left: 24, top: 74 },
+    ],
+  },
+};
 const SOCIAL_PLATFORMS = {
   x: "X",
   instagram: "Instagram",
@@ -120,6 +156,7 @@ export default function Home() {
   const [showAccentLine, setShowAccentLine] = useState(false);
   const [lastDragged, setLastDragged] = useState(null);
   const [resizing, setResizing] = useState(false);
+  const [textos, setTextos] = useState([]);
   const [showTeamTag, setShowTeamTag] = useState(true);
   const [teamTagText, setTeamTagText] = useState("Equipo");
   const [colectivoScale, setColectivoScale] = useState({});
@@ -229,6 +266,7 @@ export default function Home() {
     recortar,
     showTeamTag,
     teamTagText,
+    textos,
     positions,
   };
 
@@ -268,6 +306,7 @@ export default function Home() {
     if (typeof s.recortar === "boolean") setRecortar(s.recortar);
     if (typeof s.showTeamTag === "boolean") setShowTeamTag(s.showTeamTag);
     if (typeof s.teamTagText === "string") setTeamTagText(s.teamTagText);
+    setTextos(Array.isArray(s.textos) ? s.textos : []);
     setPositions(s.positions || {});
   }
 
@@ -593,6 +632,7 @@ export default function Home() {
     setVsLineLength(50);
     setVsLineThickness(1);
     setColectivoScale({});
+    setTextos([]);
     setLastDragged(null);
   }
 
@@ -851,6 +891,98 @@ export default function Home() {
     };
   }
 
+  // Un id por bloque que no se repita aunque se creen dos en el mismo clic.
+  const textoSeq = useRef(0);
+  function nuevoIdTexto() {
+    textoSeq.current += 1;
+    return "txt-" + Date.now() + "-" + textoSeq.current;
+  }
+
+  function addTexto(extra) {
+    if (textos.length >= 6) return null;
+    const t = {
+      id: nuevoIdTexto(),
+      contenido: "Escribe aquí",
+      estilo: "serif",
+      escala: 1,
+      color: "#f3ede4",
+      fondo: "#e8c33c",
+      align: "centro",
+      detras: false,
+      ...extra,
+    };
+    setTextos((l) => (l.length >= 6 ? l : [...l, t]));
+    setLastDragged(t.id);
+    return t.id;
+  }
+
+  // Copia un bloque con su estilo y lo deja un poco más abajo, para encadenar
+  // dos líneas sin volver a elegir fuente, color y tamaño.
+  function duplicarTexto(id) {
+    if (textos.length >= 6) {
+      showToast("Ya hay seis textos en la portada");
+      return;
+    }
+    const orig = textos.find((t) => t.id === id);
+    if (!orig) return;
+    const copia = { ...orig, id: nuevoIdTexto() };
+    setTextos((l) => (l.length >= 6 ? l : [...l, copia]));
+    const p = positions[id];
+    if (p) {
+      setPositions((prev) => ({
+        ...prev,
+        [copia.id]: { left: p.left, top: Math.min(94, p.top + 12) },
+      }));
+    }
+    setLastDragged(copia.id);
+  }
+
+  // Añade de golpe las dos líneas de una pareja, ya colocadas.
+  function addPareja(clave) {
+    const pareja = PAREJAS_TEXTO[clave];
+    if (!pareja) return;
+    if (textos.length + pareja.bloques.length > 6) {
+      showToast("No caben: quita algún texto antes");
+      return;
+    }
+    const nuevos = pareja.bloques.map((b) => {
+      const { left, top, ...resto } = b;
+      return {
+        bloque: {
+          id: nuevoIdTexto(),
+          contenido: "Escribe aquí",
+          estilo: "serif",
+          escala: 1,
+          color: "#f3ede4",
+          fondo: "#e8c33c",
+          align: "centro",
+          detras: false,
+          ...resto,
+        },
+        left,
+        top,
+      };
+    });
+    setTextos((l) => [...l, ...nuevos.map((n) => n.bloque)]);
+    setPositions((prev) => {
+      const next = { ...prev };
+      nuevos.forEach((n) => {
+        next[n.bloque.id] = { left: n.left, top: n.top };
+      });
+      return next;
+    });
+    setLastDragged(nuevos[nuevos.length - 1].bloque.id);
+  }
+
+  function editarTexto(id, campo, valor) {
+    setTextos((l) => l.map((t) => (t.id === id ? { ...t, [campo]: valor } : t)));
+  }
+
+  function quitarTexto(id) {
+    setTextos((l) => l.filter((t) => t.id !== id));
+    setLastDragged((k) => (k === id ? null : k));
+  }
+
   async function addExtraLogo(file) {
     if (!file || extraLogos.length >= 6) return;
     const url = await processLogo(file);
@@ -883,6 +1015,8 @@ export default function Home() {
     if (SCALES[key]) return SCALES[key];
     const ex = extraLogos.find((x) => x.id === key);
     if (ex) return [ex.scale, (v) => setExtraScale(key, v), 0.3, 4];
+    const tx = textos.find((t) => t.id === key);
+    if (tx) return [tx.escala, (v) => editarTexto(key, "escala", v), 0.3, 4];
     if (key.startsWith("foto-")) {
       const i = Number(key.slice(5));
       return [
@@ -995,6 +1129,7 @@ export default function Home() {
     setVsLineLength(50);
     setVsLineThickness(1);
     setColectivoScale({});
+    setTextos([]);
     setLastDragged(null);
     setPhotoScale(1);
     setPhotoOffsetY(0);
@@ -1633,6 +1768,132 @@ export default function Home() {
             </button>
           </div>
 
+          <div className={sectionClass("textos")}>
+            <button type="button" className="label section-head" onClick={() => toggleSection("textos")}>
+              <span>Textos ({textos.length}/6)</span><span className="chev" />
+            </button>
+
+            {textos.map((t, i) => (
+              <div className="texto-card" key={t.id}>
+                <div className="texto-card-cab">
+                  <span className="crest-label">Texto {i + 1}</span>
+                  <div className="texto-card-acciones">
+                    <button className="tpl-del" onClick={() => duplicarTexto(t.id)} aria-label="Duplicar texto" title="Duplicar">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="9" y="9" width="11" height="11" rx="2" />
+                        <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+                      </svg>
+                    </button>
+                    <button className="tpl-del" onClick={() => quitarTexto(t.id)} aria-label="Quitar texto" title="Quitar">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  className="field-static field-input texto-area"
+                  rows={2}
+                  value={t.contenido}
+                  onChange={(e) => editarTexto(t.id, "contenido", e.target.value)}
+                  placeholder="Escribe el texto"
+                />
+                <div className="pill-row">
+                  {Object.entries(ESTILOS_TEXTO).map(([id, nombre]) => (
+                    <button
+                      key={id}
+                      className={"style-pill" + (t.estilo === id ? " active" : "")}
+                      onClick={() => editarTexto(t.id, "estilo", id)}
+                    >
+                      {nombre}
+                    </button>
+                  ))}
+                </div>
+                <div className="pill-row">
+                  {Object.entries(ALINEACIONES).map(([id, nombre]) => (
+                    <button
+                      key={id}
+                      className={"style-pill" + ((t.align || "centro") === id ? " active" : "")}
+                      onClick={() => editarTexto(t.id, "align", id)}
+                    >
+                      {nombre}
+                    </button>
+                  ))}
+                </div>
+                <div className="blur-row">
+                  <span className="crest-label">Tamaño</span>
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="4"
+                    step="0.05"
+                    value={t.escala}
+                    onChange={(e) => editarTexto(t.id, "escala", Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{Math.round(t.escala * 100)}%</span>
+                </div>
+                <div className="blur-row">
+                  <span className="crest-label">Letra</span>
+                  <div className="mini-swatches">
+                    {TEXT_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        className={"mini-swatch" + (t.color === c ? " active" : "")}
+                        style={{ background: c }}
+                        onClick={() => editarTexto(t.id, "color", c)}
+                      />
+                    ))}
+                  </div>
+                </div>
+                {t.estilo === "destacado" && (
+                  <div className="blur-row">
+                    <span className="crest-label">Bloque</span>
+                    <div className="mini-swatches">
+                      {FONDOS_TEXTO.map((c) => (
+                        <button
+                          key={c}
+                          className={"mini-swatch" + (t.fondo === c ? " active" : "")}
+                          style={{ background: c }}
+                          onClick={() => editarTexto(t.id, "fondo", c)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="toggle-row">
+                  <div className="toggle-row-title">Detrás del jugador</div>
+                  <button
+                    className={"switch" + (t.detras ? " on" : "")}
+                    onClick={() => editarTexto(t.id, "detras", !t.detras)}
+                  >
+                    <div className="switch-knob" />
+                  </button>
+                </div>
+                {t.detras && (
+                  <div className="texto-aviso">
+                    Necesita la foto recortada. Colócalo antes de mandarlo detrás:
+                    ahí lo tapa la figura y cuesta agarrarlo.
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {textos.length < 6 && (
+              <button className="tpl-new" onClick={() => addTexto()}>
+                + Añadir un texto a la portada
+              </button>
+            )}
+            <span className="crest-label">Parejas listas</span>
+            <div className="pill-row">
+              {Object.entries(PAREJAS_TEXTO).map(([id, p]) => (
+                <button key={id} className="style-pill" onClick={() => addPareja(id)}>
+                  {p.nombre}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className={sectionClass("extra")}>
             <button type="button" className="label section-head" onClick={() => toggleSection("extra")}><span>3 · Logos extra ({extraLogos.length}/6)</span><span className="chev" /></button>
             <input
@@ -2130,6 +2391,26 @@ export default function Home() {
               </>
             )}
 
+            {textos.map((t) => (
+              <div
+                key={t.id}
+                className={"texto-libre tx-" + t.estilo + " al-" + (t.align || "centro")}
+                style={{
+                  ...styleFor(t.id),
+                  fontSize: t.escala * 4 + "cqw",
+                  color: t.color,
+                  // Por detrás de la foto recortada (z-index 1) pero por
+                  // delante del fondo: el titular pasa tras el jugador.
+                  ...(t.detras ? { zIndex: 0 } : null),
+                  ...(t.estilo === "destacado" ? { background: t.fondo } : null),
+                }}
+                onPointerDown={startDrag(t.id)}
+              >
+                {t.contenido}
+                {resizeHandle(t.id)}
+              </div>
+            ))}
+
             {extraLogos.map((lg) => (
               <div
                 key={lg.id}
@@ -2388,6 +2669,11 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .tpl-load:hover{border-color:var(--gold);color:var(--text);}
 .tpl-del{padding:0 9px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-faint);display:flex;align-items:center;}
 .tpl-del:hover{color:#d2624f;border-color:#d2624f;}
+.texto-card{display:flex;flex-direction:column;gap:7px;padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface);}
+.texto-card-cab{display:flex;align-items:center;justify-content:space-between;}
+.texto-card-acciones{display:flex;gap:5px;}
+.texto-aviso{font-family:var(--font-sans);font-size:10.5px;line-height:1.35;color:var(--text-faint);}
+.texto-area{resize:vertical;min-height:44px;line-height:1.4;font-size:12.5px;}
 .tpl-new{padding:10px;border-radius:8px;font-size:12px;font-weight:600;background:transparent;border:1px dashed var(--border-strong);color:var(--text-faint);}
 .tpl-new:hover{border-color:var(--gold);color:var(--gold);}
 .tpl-save-row{display:flex;gap:5px;align-items:center;}
@@ -2438,6 +2724,21 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .team-label{font-family:var(--font-sans);font-size:10px;letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase;}
 .empty-note{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);z-index:4;padding:7px 16px;border-radius:999px;background:rgba(6,5,5,.72);border:1px solid var(--border);font-family:var(--font-sans);font-size:11.5px;color:var(--text-dim);text-align:center;letter-spacing:.03em;white-space:nowrap;}
 .social-tag{position:absolute;left:5%;bottom:6%;display:flex;align-items:center;gap:.5em;color:var(--text);font-family:var(--font-sans);font-weight:600;letter-spacing:.04em;line-height:1;text-shadow:0 2px 8px rgba(0,0,0,.6);white-space:nowrap;}
+.texto-libre{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);white-space:pre-wrap;
+  max-width:88%;line-height:1.05;z-index:5;text-align:center;}
+.texto-libre.al-izquierda{text-align:left;}
+.texto-libre.al-centro{text-align:center;}
+.texto-libre.al-derecha{text-align:right;}
+.tx-serif{font-family:var(--font-display);font-style:italic;font-weight:600;letter-spacing:-.01em;
+  text-shadow:0 3px 14px rgba(0,0,0,.55);}
+.tx-destacado{font-family:'Anton','Archivo Black',var(--font-sans);text-transform:uppercase;
+  letter-spacing:.005em;padding:.1em .34em;line-height:1.12;}
+.tx-condensada{font-family:'Anton','Archivo Black',var(--font-sans);text-transform:uppercase;
+  letter-spacing:.01em;text-shadow:0 3px 14px rgba(0,0,0,.55);}
+.tx-limpio{font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:.12em;
+  text-shadow:0 2px 12px rgba(0,0,0,.55);}
+.tx-fino{font-family:var(--font-sans);font-weight:400;text-transform:uppercase;letter-spacing:.3em;
+  text-shadow:0 2px 10px rgba(0,0,0,.5);}
 .extra-logo{position:absolute;left:22%;top:60%;filter:drop-shadow(0 3px 10px rgba(0,0,0,.55));}
 .extra-logo img{width:100%;height:auto;display:block;object-fit:contain;}
 .watermark-logo{position:absolute;right:4%;bottom:4%;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));}
@@ -2452,9 +2753,9 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .photo-frame-individual{right:6%;bottom:0;width:46%;height:92%;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);mask-composite:intersect;}
 .photo-frame-colectivo{left:50%;bottom:0;width:60%;height:80%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);mask-composite:intersect;}
 .photo-frame-partido{left:50%;bottom:0;width:46%;height:74%;transform:translateX(-50%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to bottom,transparent 0%,#000 14%,#000 86%,transparent 100%),linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);mask-composite:intersect;}
-.jornada,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo,.vs-mark,.social-tag,.vs-line,.extra-logo{cursor:grab;touch-action:none;z-index:3;}
-.jornada:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover,.vs-mark:hover,.social-tag:hover,.vs-line:hover,.extra-logo:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
-.jornada:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active,.vs-mark:active,.social-tag:active,.vs-line:active,.extra-logo:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
+.jornada,.crest-mark,.crest-logo,.team-tag,.league-mark,.watermark-logo,.vs-mark,.social-tag,.vs-line,.extra-logo,.texto-libre{cursor:grab;touch-action:none;z-index:3;}
+.jornada:hover,.crest-mark:hover,.crest-logo:hover,.team-tag:hover,.league-mark:hover,.watermark-logo:hover,.vs-mark:hover,.social-tag:hover,.vs-line:hover,.extra-logo:hover,.texto-libre:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
+.jornada:active,.crest-mark:active,.crest-logo:active,.team-tag:active,.league-mark:active,.watermark-logo:active,.vs-mark:active,.social-tag:active,.vs-line:active,.extra-logo:active,.texto-libre:active{cursor:grabbing;outline:1px dashed var(--gold);z-index:10;}
 .safe-margin{position:absolute;inset:6%;border:1px dashed rgba(243,237,224,.3);pointer-events:none;opacity:0;transition:opacity .15s ease;border-radius:2px;}
 .safe-margin.show{opacity:1;}
 .snap-guide{position:absolute;background:var(--gold);opacity:0;pointer-events:none;transition:opacity .08s ease;box-shadow:0 0 6px rgba(201,162,75,.6);}
