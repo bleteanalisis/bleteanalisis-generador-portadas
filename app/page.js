@@ -24,7 +24,17 @@ const ESTILOS_TEXTO = {
   condensada: "Condensada",
   limpio: "Limpio",
   fino: "Fino",
+  titular: "Titular",
+  subtitulo: "Subtítulo",
 };
+// Flecha curva de miniatura: una sola forma, girada a los cuatro cuadrantes.
+const FLECHA_ORIENT = {
+  ai: { nombre: "↖", flip: "none" },
+  ad: { nombre: "↗", flip: "scaleX(-1)" },
+  bi: { nombre: "↙", flip: "scaleY(-1)" },
+  bd: { nombre: "↘", flip: "scale(-1,-1)" },
+};
+const FLECHA_COLORS = ["#f3ede4", "#e8c33c", "#b23a2f", "#0b0a09"];
 const FONDOS_TEXTO = ["#e8c33c", "#f3ede4", "#c9a24b", "#b23a2f", "#0b0a09"];
 const ALINEACIONES = { izquierda: "Izq.", centro: "Centro", derecha: "Der." };
 // Parejas listas: la estructura de dos líneas que se repite en portada, ya
@@ -157,6 +167,11 @@ export default function Home() {
   const [lastDragged, setLastDragged] = useState(null);
   const [resizing, setResizing] = useState(false);
   const [textos, setTextos] = useState([]);
+  // Miniatura para redes: foto a sangre, capturas insertadas y flechas.
+  const [fotoSangre, setFotoSangre] = useState(false);
+  const [fotoColor, setFotoColor] = useState(false);
+  const [insertos, setInsertos] = useState([]);
+  const [flechas, setFlechas] = useState([]);
   const [showTeamTag, setShowTeamTag] = useState(true);
   const [teamTagText, setTeamTagText] = useState("Equipo");
   const [colectivoScale, setColectivoScale] = useState({});
@@ -267,6 +282,10 @@ export default function Home() {
     showTeamTag,
     teamTagText,
     textos,
+    fotoSangre,
+    fotoColor,
+    insertos,
+    flechas,
     positions,
   };
 
@@ -307,6 +326,10 @@ export default function Home() {
     if (typeof s.showTeamTag === "boolean") setShowTeamTag(s.showTeamTag);
     if (typeof s.teamTagText === "string") setTeamTagText(s.teamTagText);
     setTextos(Array.isArray(s.textos) ? s.textos : []);
+    setFotoSangre(!!s.fotoSangre);
+    setFotoColor(!!s.fotoColor);
+    setInsertos(Array.isArray(s.insertos) ? s.insertos : []);
+    setFlechas(Array.isArray(s.flechas) ? s.flechas : []);
     setPositions(s.positions || {});
   }
 
@@ -453,6 +476,8 @@ export default function Home() {
   }
 
   // Reduce la imagen y devuelve un data URL (sobrevive al recargar la página).
+  const insertoInputRef = useRef(null);
+
   async function processPhoto(file, maxDim = 1600) {
     const raw = await fileToDataUrl(file);
     try {
@@ -633,6 +658,10 @@ export default function Home() {
     setVsLineThickness(1);
     setColectivoScale({});
     setTextos([]);
+    setFotoSangre(false);
+    setFotoColor(false);
+    setInsertos([]);
+    setFlechas([]);
     setLastDragged(null);
   }
 
@@ -983,6 +1012,89 @@ export default function Home() {
     setLastDragged((k) => (k === id ? null : k));
   }
 
+  // Capturas (pizarra, alineación, gráfico): se reducen pero NO se les quita
+  // el fondo, que aquí es parte de la imagen.
+  async function addInserto(file) {
+    if (!file || insertos.length >= 2) return;
+    const url = await processPhoto(file, 1400);
+    setInsertos((l) => (l.length >= 2 ? l : [...l, { id: nuevoIdTexto().replace("txt", "ins"), url, scale: 1 }]));
+  }
+
+  function quitarInserto(id) {
+    setInsertos((l) => l.filter((x) => x.id !== id));
+    setLastDragged((k) => (k === id ? null : k));
+  }
+
+  function setInsertoScale(id, v) {
+    setInsertos((l) => l.map((x) => (x.id === id ? { ...x, scale: v } : x)));
+  }
+
+  function addFlecha(extra) {
+    if (flechas.length >= 2) return null;
+    const f = {
+      id: nuevoIdTexto().replace("txt", "flc"),
+      orient: "ai",
+      color: "#f3ede4",
+      escala: 1,
+      ...extra,
+    };
+    setFlechas((l) => (l.length >= 2 ? l : [...l, f]));
+    setLastDragged(f.id);
+    return f.id;
+  }
+
+  function editarFlecha(id, campo, valor) {
+    setFlechas((l) => l.map((f) => (f.id === id ? { ...f, [campo]: valor } : f)));
+  }
+
+  function quitarFlecha(id) {
+    setFlechas((l) => l.filter((f) => f.id !== id));
+    setLastDragged((k) => (k === id ? null : k));
+  }
+
+  function setFlechaScale(id, v) {
+    setFlechas((l) => l.map((f) => (f.id === id ? { ...f, escala: v } : f)));
+  }
+
+  // Deja montada la composición de miniatura: foto a sangre en color,
+  // titular a dos líneas abajo a la derecha y la flecha hacia la captura.
+  function montarMiniatura() {
+    if (textos.length > 4) {
+      showToast("Deja como mucho cuatro textos antes de montarla");
+      return;
+    }
+    setFotoSangre(true);
+    setFotoColor(true);
+    const t1 = {
+      id: nuevoIdTexto(),
+      contenido: "Táctica",
+      estilo: "titular",
+      escala: 2.6,
+      color: "#f3ede4",
+      fondo: "#e8c33c",
+      align: "derecha",
+      detras: false,
+    };
+    const t2 = {
+      id: nuevoIdTexto(),
+      contenido: "Gasperini",
+      estilo: "subtitulo",
+      escala: 1.7,
+      color: "#f3ede4",
+      fondo: "#e8c33c",
+      align: "derecha",
+      detras: false,
+    };
+    setTextos((l) => [...l, t1, t2]);
+    const idFlecha = flechas.length < 2 ? addFlecha({ escala: 1.3 }) : null;
+    setPositions((prev) => {
+      const next = { ...prev, [t1.id]: { left: 71, top: 64 }, [t2.id]: { left: 71, top: 84 } };
+      if (idFlecha) next[idFlecha] = { left: 55, top: 42 };
+      return next;
+    });
+    setLastDragged(t1.id);
+  }
+
   async function addExtraLogo(file) {
     if (!file || extraLogos.length >= 6) return;
     const url = await processLogo(file);
@@ -1017,6 +1129,10 @@ export default function Home() {
     if (ex) return [ex.scale, (v) => setExtraScale(key, v), 0.3, 4];
     const tx = textos.find((t) => t.id === key);
     if (tx) return [tx.escala, (v) => editarTexto(key, "escala", v), 0.3, 4];
+    const ins = insertos.find((x) => x.id === key);
+    if (ins) return [ins.scale, (v) => setInsertoScale(key, v), 0.3, 3];
+    const fl = flechas.find((x) => x.id === key);
+    if (fl) return [fl.escala, (v) => setFlechaScale(key, v), 0.3, 4];
     if (key.startsWith("foto-")) {
       const i = Number(key.slice(5));
       return [
@@ -1130,6 +1246,10 @@ export default function Home() {
     setVsLineThickness(1);
     setColectivoScale({});
     setTextos([]);
+    setFotoSangre(false);
+    setFotoColor(false);
+    setInsertos([]);
+    setFlechas([]);
     setLastDragged(null);
     setPhotoScale(1);
     setPhotoOffsetY(0);
@@ -1894,6 +2014,124 @@ export default function Home() {
             </div>
           </div>
 
+          <div className={sectionClass("miniatura")}>
+            <button type="button" className="label section-head" onClick={() => toggleSection("miniatura")}>
+              <span>Miniatura (redes)</span><span className="chev" />
+            </button>
+
+            <button className="tpl-new destacada" onClick={montarMiniatura}>
+              Montar miniatura
+            </button>
+            <div className="texto-aviso">
+              Pone la foto a sangre y en color, el titular a dos líneas abajo a la
+              derecha y la flecha. La captura la subes tú aquí debajo.
+            </div>
+
+            <div className="toggle-row">
+              <div className="toggle-row-title">Foto a sangre</div>
+              <button className={"switch" + (fotoSangre ? " on" : "")} onClick={() => setFotoSangre((v) => !v)}>
+                <div className="switch-knob" />
+              </button>
+            </div>
+            <div className="toggle-row">
+              <div className="toggle-row-title">Foto en color</div>
+              <button className={"switch" + (fotoColor ? " on" : "")} onClick={() => setFotoColor((v) => !v)}>
+                <div className="switch-knob" />
+              </button>
+            </div>
+
+            <span className="crest-label">Capturas ({insertos.length}/2)</span>
+            <input
+              ref={insertoInputRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                addInserto(e.target.files?.[0] || null);
+                e.target.value = "";
+              }}
+            />
+            {insertos.map((ins, i) => (
+              <div className="tpl-item" key={ins.id}>
+                <button className="tpl-load" onClick={() => setLastDragged(ins.id)}>
+                  <img src={ins.url} alt="" className="extra-thumb" />
+                  Captura {i + 1}
+                </button>
+                <button className="tpl-del" onClick={() => quitarInserto(ins.id)} aria-label="Quitar captura">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {insertos.length < 2 && (
+              <button
+                className="tpl-new"
+                {...dropZone(addInserto)}
+                onClick={() => insertoInputRef.current?.click()}
+              >
+                + Subir pizarra, alineación o gráfico
+              </button>
+            )}
+
+            <span className="crest-label">Flechas ({flechas.length}/2)</span>
+            {flechas.map((f, i) => (
+              <div className="texto-card" key={f.id}>
+                <div className="texto-card-cab">
+                  <span className="crest-label">Flecha {i + 1}</span>
+                  <button className="tpl-del" onClick={() => quitarFlecha(f.id)} aria-label="Quitar flecha">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="pill-row">
+                  {Object.entries(FLECHA_ORIENT).map(([id, o]) => (
+                    <button
+                      key={id}
+                      className={"style-pill flecha-pill" + (f.orient === id ? " active" : "")}
+                      onClick={() => editarFlecha(f.id, "orient", id)}
+                      title="Hacia dónde apunta"
+                    >
+                      {o.nombre}
+                    </button>
+                  ))}
+                </div>
+                <div className="blur-row">
+                  <span className="crest-label">Tamaño</span>
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="4"
+                    step="0.05"
+                    value={f.escala}
+                    onChange={(e) => editarFlecha(f.id, "escala", Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{Math.round(f.escala * 100)}%</span>
+                </div>
+                <div className="blur-row">
+                  <span className="crest-label">Color</span>
+                  <div className="mini-swatches">
+                    {FLECHA_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        className={"mini-swatch" + (f.color === c ? " active" : "")}
+                        style={{ background: c }}
+                        onClick={() => editarFlecha(f.id, "color", c)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {flechas.length < 2 && (
+              <button className="tpl-new" onClick={() => addFlecha()}>
+                + Añadir una flecha
+              </button>
+            )}
+          </div>
+
           <div className={sectionClass("extra")}>
             <button type="button" className="label section-head" onClick={() => toggleSection("extra")}><span>3 · Logos extra ({extraLogos.length}/6)</span><span className="chev" /></button>
             <input
@@ -2252,7 +2490,7 @@ export default function Home() {
             {category === "partido" && (
               <>
                 {generated && photoUrl && (
-                  <div className={"photo-frame photo-frame-partido" + (photoCutUrl ? " recortada" : "")} style={photoFrameStyle()} onPointerDown={startDrag("photo")}>
+                  <div className={"photo-frame photo-frame-partido" + (photoCutUrl ? " recortada" : "") + (fotoSangre ? " sangre" : "") + (fotoColor ? " color" : "")} style={photoFrameStyle()} onPointerDown={startDrag("photo")}>
                     <img src={photoCutUrl || photoUrl} alt="" />
                     {resizeHandle("photo")}
                   </div>
@@ -2334,7 +2572,7 @@ export default function Home() {
             {category === "individual" && (
               <>
                 {generated && photoUrl && (
-                  <div className={"photo-frame photo-frame-individual" + (photoCutUrl ? " recortada" : "")} style={photoFrameStyle()} onPointerDown={startDrag("photo")}>
+                  <div className={"photo-frame photo-frame-individual" + (photoCutUrl ? " recortada" : "") + (fotoSangre ? " sangre" : "") + (fotoColor ? " color" : "")} style={photoFrameStyle()} onPointerDown={startDrag("photo")}>
                     <img src={photoCutUrl || photoUrl} alt="" />
                     {resizeHandle("photo")}
                   </div>
@@ -2365,7 +2603,7 @@ export default function Home() {
                 {generated &&
                   colectivoPhotos.length > 0 &&
                   colectivoPhotos.map((p, i) => (
-                    <div className={"photo-frame" + (colectivoCut[i] ? " recortada" : "")} style={colectivoFrameStyle(i, colectivoPhotos.length)} onPointerDown={startDrag("foto-" + i)} key={p.url}>
+                    <div className={"photo-frame" + (colectivoCut[i] ? " recortada" : "") + (fotoSangre && colectivoPhotos.length === 1 ? " sangre" : "") + (fotoColor ? " color" : "")} style={colectivoFrameStyle(i, colectivoPhotos.length)} onPointerDown={startDrag("foto-" + i)} key={p.url}>
                       <img src={colectivoCut[i] || p.url} alt="" />
                       {resizeHandle("foto-" + i)}
                     </div>
@@ -2390,6 +2628,41 @@ export default function Home() {
                 )}
               </>
             )}
+
+            {fotoSangre && generated && <div className="sangre-scrim" />}
+
+            {insertos.map((ins) => (
+              <div
+                key={ins.id}
+                className="inserto"
+                style={{ ...styleFor(ins.id), width: ins.scale * 42 + "%" }}
+                onPointerDown={startDrag(ins.id)}
+              >
+                <img src={ins.url} alt="" />
+                {resizeHandle(ins.id)}
+              </div>
+            ))}
+
+            {flechas.map((f) => (
+              <div
+                key={f.id}
+                className="flecha"
+                style={{ ...styleFor(f.id), width: f.escala * 15 + "%", color: f.color }}
+                onPointerDown={startDrag(f.id)}
+              >
+                <svg viewBox="0 0 100 100" style={{ transform: FLECHA_ORIENT[f.orient].flip }}>
+                  <path
+                    d="M90 96 C 97 52 74 20 33 15"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                  />
+                  <path d="M20 12 L 50 4 L 46 32 Z" fill="currentColor" />
+                </svg>
+                {resizeHandle(f.id)}
+              </div>
+            ))}
 
             {textos.map((t) => (
               <div
@@ -2737,6 +3010,10 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
   letter-spacing:.01em;text-shadow:0 3px 14px rgba(0,0,0,.55);}
 .tx-limpio{font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:.12em;
   text-shadow:0 2px 12px rgba(0,0,0,.55);}
+.tx-titular{font-family:var(--font-display);font-weight:700;letter-spacing:-.025em;line-height:.98;
+  text-shadow:0 4px 20px rgba(0,0,0,.6);}
+.tx-subtitulo{font-family:var(--font-display);font-weight:500;letter-spacing:-.012em;line-height:1.02;
+  text-shadow:0 3px 16px rgba(0,0,0,.55);}
 .tx-fino{font-family:var(--font-sans);font-weight:400;text-transform:uppercase;letter-spacing:.3em;
   text-shadow:0 2px 10px rgba(0,0,0,.5);}
 .extra-logo{position:absolute;left:22%;top:60%;filter:drop-shadow(0 3px 10px rgba(0,0,0,.55));}
@@ -2769,6 +3046,31 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .gallery-item img{width:100%;border-radius:5px;border:1px solid var(--border);display:block;transition:border-color .15s;}
 .gallery-item:hover img{border-color:var(--gold);}
 .gallery-item span{display:block;font-size:10px;color:var(--text-faint);margin-top:4px;text-align:center;}
+.sangre-scrim{position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:linear-gradient(to top,rgba(6,5,5,.72) 0%,rgba(6,5,5,.28) 32%,transparent 62%),
+             linear-gradient(to right,rgba(6,5,5,.34) 0%,transparent 38%);}
+.inserto{position:absolute;left:68%;top:27%;transform:translate(-50%,-50%);z-index:4;
+  border-radius:1.5cqw;overflow:hidden;border:1px solid rgba(243,237,224,.16);
+  box-shadow:0 2.2cqw 4.5cqw -1.4cqw rgba(0,0,0,.78);cursor:grab;touch-action:none;}
+.inserto img{width:100%;height:auto;display:block;}
+.inserto:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
+.inserto:active{cursor:grabbing;outline:1px dashed var(--gold);}
+.flecha{position:absolute;left:52%;top:44%;transform:translate(-50%,-50%);z-index:6;
+  cursor:grab;touch-action:none;filter:drop-shadow(0 .5cqw 1.4cqw rgba(0,0,0,.6));}
+.flecha svg{width:100%;height:auto;display:block;overflow:visible;}
+.flecha:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
+.flecha:active{cursor:grabbing;outline:1px dashed var(--gold);}
+.flecha-pill{min-width:38px;text-align:center;font-size:14px;line-height:1;padding:5px 0;}
+.tpl-new.destacada{border-style:solid;border-color:var(--gold);color:var(--gold);}
+.tpl-new.destacada:hover{background:rgba(201,162,75,.1);}
+/* Foto a sangre: ocupa la portada entera y se salta el difuminado de bordes. */
+.photo-frame.sangre{left:0!important;top:0!important;right:auto!important;bottom:auto!important;
+  width:100%!important;height:100%!important;transform:none!important;overflow:hidden!important;
+  -webkit-mask-image:none!important;mask-image:none!important;border-radius:0!important;}
+.photo-frame.sangre img{width:100%!important;height:100%!important;object-fit:cover!important;}
+.photo-frame.color img{filter:contrast(1.06) saturate(1.06) brightness(.97)!important;}
+.photo-frame.color.recortada img{filter:contrast(1.06) saturate(1.06) brightness(.97)
+  drop-shadow(0 10px 26px rgba(0,0,0,.55))!important;}
 .resize-handle{position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;border-radius:50%;background:var(--gold);border:2px solid var(--bg);cursor:nwse-resize;touch-action:none;z-index:12;box-shadow:0 1px 4px rgba(0,0,0,.6);}
 .resize-handle:hover{transform:scale(1.25);}
 .reset-link{font-size:12px;background:none;border:none;color:var(--text-faint);padding:0;}
