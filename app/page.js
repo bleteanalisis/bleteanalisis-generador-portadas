@@ -27,13 +27,20 @@ const ESTILOS_TEXTO = {
   titular: "Titular",
   subtitulo: "Subtítulo",
 };
-// Flecha curva de miniatura: una sola forma, girada a los cuatro cuadrantes.
-const FLECHA_ORIENT = {
-  ai: { nombre: "↖", flip: "none" },
-  ad: { nombre: "↗", flip: "scaleX(-1)" },
-  bi: { nombre: "↙", flip: "scaleY(-1)" },
-  bd: { nombre: "↘", flip: "scale(-1,-1)" },
-};
+// Flecha curva de miniatura: gira libre en 360°, y el espejo cambia hacia
+// qué lado se comba la curva (girar sola no lo consigue).
+const FLECHA_ATAJOS = [
+  { nombre: "↖", giro: 0 },
+  { nombre: "↗", giro: 90 },
+  { nombre: "↘", giro: 180 },
+  { nombre: "↙", giro: 270 },
+];
+// Las flechas guardadas antes del giro libre traían una de cuatro posturas.
+const FLECHA_LEGADO = { ai: [0, false], ad: [0, true], bi: [180, true], bd: [180, false] };
+function flechaGiro(f) {
+  if (typeof f.giro === "number") return [f.giro, !!f.espejo];
+  return FLECHA_LEGADO[f.orient] || [0, false];
+}
 const FLECHA_COLORS = ["#f3ede4", "#e8c33c", "#b23a2f", "#0b0a09"];
 const FONDOS_TEXTO = ["#e8c33c", "#f3ede4", "#c9a24b", "#b23a2f", "#0b0a09"];
 const ALINEACIONES = { izquierda: "Izq.", centro: "Centro", derecha: "Der." };
@@ -1033,7 +1040,8 @@ export default function Home() {
     if (flechas.length >= 2) return null;
     const f = {
       id: nuevoIdTexto().replace("txt", "flc"),
-      orient: "ai",
+      giro: 0,
+      espejo: false,
       color: "#f3ede4",
       escala: 1,
       ...extra,
@@ -1044,7 +1052,15 @@ export default function Home() {
   }
 
   function editarFlecha(id, campo, valor) {
-    setFlechas((l) => l.map((f) => (f.id === id ? { ...f, [campo]: valor } : f)));
+    setFlechas((l) =>
+      l.map((f) => {
+        if (f.id !== id) return f;
+        // Una flecha de antes del giro libre se pasa entera al formato nuevo
+        // en cuanto se toca: si no, cambiar el giro le borraba el espejo.
+        const [giro, espejo] = flechaGiro(f);
+        return { ...f, giro, espejo, [campo]: valor };
+      })
+    );
   }
 
   function quitarFlecha(id) {
@@ -2052,16 +2068,31 @@ export default function Home() {
               }}
             />
             {insertos.map((ins, i) => (
-              <div className="tpl-item" key={ins.id}>
-                <button className="tpl-load" onClick={() => setLastDragged(ins.id)}>
-                  <img src={ins.url} alt="" className="extra-thumb" />
-                  Captura {i + 1}
-                </button>
-                <button className="tpl-del" onClick={() => quitarInserto(ins.id)} aria-label="Quitar captura">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
+              <div className="texto-card" key={ins.id}>
+                <div className="texto-card-cab">
+                  <button className="tpl-load captura-load" onClick={() => setLastDragged(ins.id)}>
+                    <img src={ins.url} alt="" className="extra-thumb" />
+                    Captura {i + 1}
+                  </button>
+                  <button className="tpl-del" onClick={() => quitarInserto(ins.id)} aria-label="Quitar captura">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="blur-row">
+                  <span className="crest-label">Tamaño</span>
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="3"
+                    step="0.02"
+                    value={ins.scale}
+                    onChange={(e) => setInsertoScale(ins.id, Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{Math.round(ins.scale * 100)}%</span>
+                </div>
               </div>
             ))}
             {insertos.length < 2 && (
@@ -2085,17 +2116,37 @@ export default function Home() {
                     </svg>
                   </button>
                 </div>
+                <div className="blur-row">
+                  <span className="crest-label">Giro</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="359"
+                    step="1"
+                    value={flechaGiro(f)[0]}
+                    onChange={(e) => editarFlecha(f.id, "giro", Number(e.target.value))}
+                    className="blur-slider"
+                  />
+                  <span className="blur-value">{flechaGiro(f)[0]}°</span>
+                </div>
                 <div className="pill-row">
-                  {Object.entries(FLECHA_ORIENT).map(([id, o]) => (
+                  {FLECHA_ATAJOS.map((a) => (
                     <button
-                      key={id}
-                      className={"style-pill flecha-pill" + (f.orient === id ? " active" : "")}
-                      onClick={() => editarFlecha(f.id, "orient", id)}
-                      title="Hacia dónde apunta"
+                      key={a.giro}
+                      className={"style-pill flecha-pill" + (flechaGiro(f)[0] === a.giro ? " active" : "")}
+                      onClick={() => editarFlecha(f.id, "giro", a.giro)}
+                      title={"Girar a " + a.giro + "°"}
                     >
-                      {o.nombre}
+                      {a.nombre}
                     </button>
                   ))}
+                  <button
+                    className={"style-pill" + (flechaGiro(f)[1] ? " active" : "")}
+                    onClick={() => editarFlecha(f.id, "espejo", !flechaGiro(f)[1])}
+                    title="Cambia hacia qué lado se comba la curva"
+                  >
+                    Espejo
+                  </button>
                 </div>
                 <div className="blur-row">
                   <span className="crest-label">Tamaño</span>
@@ -2650,7 +2701,13 @@ export default function Home() {
                 style={{ ...styleFor(f.id), width: f.escala * 15 + "%", color: f.color }}
                 onPointerDown={startDrag(f.id)}
               >
-                <svg viewBox="0 0 100 100" style={{ transform: FLECHA_ORIENT[f.orient].flip }}>
+                <svg
+                  viewBox="0 0 100 100"
+                  style={{
+                    transform:
+                      "rotate(" + flechaGiro(f)[0] + "deg)" + (flechaGiro(f)[1] ? " scaleX(-1)" : ""),
+                  }}
+                >
                   <path
                     d="M90 96 C 97 52 74 20 33 15"
                     fill="none"
@@ -3061,6 +3118,7 @@ button{font-family:var(--font-sans);cursor:pointer;-webkit-appearance:none;appea
 .flecha:hover{outline:1px dashed rgba(243,237,224,.4);outline-offset:4px;}
 .flecha:active{cursor:grabbing;outline:1px dashed var(--gold);}
 .flecha-pill{min-width:38px;text-align:center;font-size:14px;line-height:1;padding:5px 0;}
+.captura-load{flex:1;min-width:0;}
 .tpl-new.destacada{border-style:solid;border-color:var(--gold);color:var(--gold);}
 .tpl-new.destacada:hover{background:rgba(201,162,75,.1);}
 /* Foto a sangre: ocupa la portada entera y se salta el difuminado de bordes. */
